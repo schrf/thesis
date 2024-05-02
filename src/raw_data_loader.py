@@ -51,7 +51,7 @@ def ccle_tcga_loader() -> (pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFram
 
         return ccle, tcga, ccle_metadata, tcga_metadata
     else:
-        print("faster loading of ccle and tcga and metadata")
+        print("fast loading of ccle and tcga and metadata as tcga.csv and ccle.csv are already present")
         print("load ccle")
         ccle = pd.read_csv("data/ccle.csv", index_col=0)
         print("load tcga")

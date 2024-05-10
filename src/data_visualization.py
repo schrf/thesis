@@ -1,15 +1,16 @@
 from pacmap import PaCMAP
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from pandas import DataFrame
 
 def combined_data_pacmap(data, viz_preprocessing):
     # Extract the data columns for Pacmap visualization
     data_columns = [col for col in data.columns if col not in ['primary_disease', 'gender', 'age', 'dataset', 'normalized_age']]
 
     if viz_preprocessing["z_score_norm"] == "per_gene":
-        data = _z_score_normalization_columnwise(data, data_columns)
+        data = z_score_normalization_columnwise(data, data_columns)
     elif viz_preprocessing["z_score_norm"] == "per_sample":
-        data = _z_score_normalization_rowwise(data, data_columns)
+        data = z_score_normalization_rowwise(data, data_columns)
 
     _combined_data_pacmap(data, viz_preprocessing, data_columns)
 
@@ -22,12 +23,15 @@ def _combined_data_pacmap(data, viz_preprocessing, data_columns):
     # Initialize Pacmap
     model = PaCMAP()
 
-    if viz_preprocessing["only_most_variant"] != None:
-        # select data_columns for all genes or top_5000_columns for only the 5000 most variant:
-        variances = data[data_columns].var()
+    if viz_preprocessing["only_most_variant"] is not None:
 
-        # Sort variances in descending order and select the top 5000 columns
-        selected_columns = variances.sort_values(ascending=False).head(viz_preprocessing["only_most_variant"]).index
+        selected_columns = filter_variants(data[data_columns], viz_preprocessing["only_most_variant"])
+        # TODO: the above code doesn't work probably
+        ## select data_columns for all genes or top_5000_columns for only the 5000 most variant:
+        #variances = data[data_columns].var()
+
+        ## Sort variances in descending order and select the top 5000 columns
+        #selected_columns = variances.sort_values(ascending=False).head(viz_preprocessing["only_most_variant"]).index
     else:
         selected_columns = data_columns
     
@@ -41,7 +45,7 @@ def _combined_data_pacmap(data, viz_preprocessing, data_columns):
     create_pacmap_visualization(data, Y, 'dataset', 'Pacmap Visualization 5000 most variant genes: Dataset')
 
 # Helper function to create Pacmap visualization
-def create_pacmap_visualization(data, Y, metadata_column, title):
+def create_pacmap_visualization_old(data, Y, metadata_column, title):
     
     # Plot the Pacmap visualization
     plt.figure(figsize=(8, 6))
@@ -67,7 +71,44 @@ def create_pacmap_visualization(data, Y, metadata_column, title):
     plt.ylabel('Dimension 2')
     plt.show()
 
-def _z_score_normalization_rowwise(df, filter):
+# Helper function to create Pacmap visualization
+def create_pacmap_visualization(data, Y, metadata_column, title):
+    
+    # Plot the Pacmap visualization
+    plt.figure(figsize=(8, 6))
+
+    dot_size = 1
+    
+    # Color coding
+    if metadata_column == 'age':
+        scatter = plt.scatter(Y[:, 0], Y[:, 1], c=data['normalized_age'], cmap='viridis', s=dot_size)
+        plt.colorbar(scatter, label='Relative Age')
+    else:
+        categories = data[metadata_column].unique()
+        num_categories = len(categories)
+        
+        # Generate distinct colors for each category
+        colormap_one = plt.colormaps.get_cmap('tab20')
+        colors_one = [colormap_one(i) for i in range(20)]
+        colormap_two = plt.colormaps.get_cmap('tab20b')
+        colors_two = [colormap_two(i) for i in range(20)]
+        tab20_duplicated = colors_one + colors_two
+        colors = tab20_duplicated[0:num_categories]
+                
+        for i, category in enumerate(categories):
+            mask = data[metadata_column] == category
+            color = colors[i]
+            
+            plt.scatter(Y[mask, 0], Y[mask, 1], color=color, label=category, s=dot_size)
+        
+        plt.legend(title=metadata_column, markerscale=5, bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    plt.title(title)
+    plt.xlabel('Dimension 1')
+    plt.ylabel('Dimension 2')
+    plt.show()
+
+def z_score_normalization_rowwise(df, filter):
     # Calculate mean and standard deviation for each row
     filtered_df = df.loc[:, filter]
 
@@ -85,7 +126,7 @@ def _z_score_normalization_rowwise(df, filter):
     return normalized_df
 
 
-def _z_score_normalization_columnwise(df, filter):
+def z_score_normalization_columnwise(df, filter):
     # Filter DataFrame to include only the columns specified in the filter
     filtered_df = df.loc[:, filter]
 
@@ -101,3 +142,12 @@ def _z_score_normalization_columnwise(df, filter):
     normalized_df.loc[:, filter] = normalized_filtered_df  # Update filtered columns with normalized values
 
     return normalized_df
+
+def filter_variants(df: DataFrame, filter: int):
+    # select data_columns for all genes or top_5000_columns for only the 5000 most variant:
+    variances = df.var()
+
+    # Sort variances in descending order and select the top 5000 columns
+    selected_columns = variances.sort_values(ascending=False).head(filter).index
+
+    return selected_columns

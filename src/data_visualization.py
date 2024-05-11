@@ -144,10 +144,16 @@ def z_score_normalization_columnwise(df, filter):
     return normalized_df
 
 def filter_variants(df: DataFrame, filter: int):
+    """
+    lists the columns of the most variant genes
+    :param df: the gene expression dataframe
+    :param filter: integer value indicating how many genes should be maintained
+    :return: the column names of the most variant genes
+    """
     # select data_columns for all genes or top_5000_columns for only the 5000 most variant:
     variances = df.var()
 
-    # Sort variances in descending order and select the top 5000 columns
+    # Sort variances in descending order and select the most variant columns
     selected_columns = variances.sort_values(ascending=False).head(filter).index
 
     return selected_columns

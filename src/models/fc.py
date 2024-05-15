@@ -7,41 +7,40 @@ class VAE(nn.Module):
         super().__init__()
 
         # encoder
-        self.fc1 = nn.Linear(input_size, hidden_one_size)
-        self.fc2 = nn.Linear(hidden_one_size, hidden_two_size)
+        self.encoder = nn.Sequential(
+            nn.Linear(input_size, hidden_one_size),
+            nn.ReLU(),
+            nn.Linear(hidden_one_size, hidden_two_size),
+            nn.ReLU()
+        )
+
+        # latent space
         self.fc_mu = nn.Linear(hidden_two_size, z_size)
         self.fc_sigma = nn.Linear(hidden_two_size, z_size)
 
-        # random latent space
-        self.N = torch.distributions.Normal(0, 1)
-        self.N.loc = self.N.loc.cuda() #for sampling on the GPU
-        self.N.scale = self.N.scale.cuda()
-
         # decoder
-        self.fc3 = nn.Linear(z_size, hidden_two_size)
-        self.fc4 = nn.Linear(hidden_two_size, hidden_one_size)
-        self.fc5 = nn.Linear(hidden_one_size, input_size)
+        self.decoder = nn.Sequential(
+            nn.Linear(z_size, hidden_two_size),
+            nn.ReLU(),
+            nn.Linear(hidden_two_size, hidden_one_size),
+            nn.ReLU(),
+            nn.Linear(hidden_one_size, input_size)
+        )
 
-
-    def encode(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        mu = self.fc_mu(x)
-        sigma = self.fc_sigma(x)
-        sigma = torch.exp(sigma)
-        return mu, sigma
-
-    def decode(self, z):
-        z = F.relu(self.fc3(z))
-        z = F.relu(self.fc4(z))
-        z = self.fc5(z)
-        return z
-
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.rand_like(std)
+        return mu + std * eps
 
     def forward(self, x):
-        mu, sigma = self.encode(x)
-        z = mu + sigma * self.N.sample(mu.shape)
-        x_recon = self.decode(z)
+        x = self.encoder(x)
+
+        mu, sigma = self.fc_mu(x), self.fc_sigma(x)
+
+        z = self.reparameterize(mu, sigma)
+
+        x_recon = self.decoder(z)
+
         return x_recon, mu, sigma
 
 

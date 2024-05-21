@@ -157,3 +157,34 @@ def filter_variants(df: DataFrame, filter: int):
     selected_columns = variances.sort_values(ascending=False).head(filter).index
 
     return selected_columns
+
+
+def pairwise_comparison(original, reconstructed):
+    """
+    Plots multiple subplots, each containing two lines that represent gene expression samples. If N > 8, only the first 8 samples will be plotted
+    :param original: NxD np array or pd DataFrame of original gene expression data
+    :param reconstructed: NxD np array or pd DataFrame of reconstructed gene expression data
+    :return: None
+    """
+
+    N, D = original.shape
+    line_size = 1
+
+    if N > 8:
+        N = 8
+
+    fig, axes = plt.subplots(N, 1, figsize=(40, 4 * N), sharex=True)
+
+    if N == 1:
+        axes = [axes]  # Make sure axes is iterable if there's only one subplot
+
+    for i in range(N):
+        axes[i].plot(original[i], label="original gene expression data", linewidth=line_size)
+        axes[i].plot(reconstructed[i], label="reconstructed gene expression data", linewidth=line_size)
+        axes[i].legend()
+        axes[i].set_title(f'Sample {i+1}')
+
+    plt.xlabel('Index')
+    plt.tight_layout()
+    plt.show()
+

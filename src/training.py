@@ -1,16 +1,29 @@
 import torch
 from tqdm import tqdm
 import torch.nn.functional as F
-from torcheval.metrics.functional import r2_score
+from sklearn.metrics import r2_score as r2_score_sk
+from torcheval.metrics.functional import r2_score as r2_score_torch
+
+
 # loss function
 def variational_loss_func(x_recon, x , mu, sigma, beta):
-    mse = F.mse_loss(x_recon, x)
+    """
+    calculates the MSE loss and KLD and sums them up weighted with beta (mse + beta * kld)
+    :param x_recon: reconstruction data
+    :param x: original data
+    :param mu: Mean
+    :param sigma: Standard deviation
+    :param beta: weight of KLD
+    :return: the summed loss, MSE and KLD
+    """
+    mse = F.mse_loss(x_recon, x, reduction="sum")
     kld = -0.5 * torch.sum(1 + sigma - mu.pow(2) - sigma.exp())
     loss = mse + beta * kld
     return loss, mse, kld
 
 # training function
-def variational_train(model, train_loader, val_loader, optimizer, scheduler, writer, writer_val, epoch, device, beta=1.0):
+def variational_train(model, train_loader, val_loader, optimizer, scheduler,
+                      writer, writer_val, epoch, device, beta=0.0002):
     """
     Trains a variational autoencoder.
 
@@ -30,23 +43,23 @@ def variational_train(model, train_loader, val_loader, optimizer, scheduler, wri
     num_log_steps = 100  # Define the number of log steps per epoch
 
     for train_iteration, batch in enumerate(tqdm(train_loader, desc=f"Training epoch {epoch + 1}")):
+        optimizer.zero_grad()
+
         batch = batch.to(device)
         batch_recon, mu, sigma = model(batch)
-
-        optimizer.zero_grad()
 
         loss, mse, kld = variational_loss_func(batch_recon, batch, mu, sigma, beta)
 
         loss.backward()
         optimizer.step()
 
-        r2 = r2_score(batch_recon, batch)
+        r2_impl = r2_score_self(batch, batch_recon)
+
+        batch_size = len(batch)
 
         current_step = epoch * num_log_steps + (train_iteration * num_log_steps) // len(train_loader)
-        writer.add_scalar("vae loss combined", loss.item(), current_step)
-        writer.add_scalar("vae mse loss", mse.item(), current_step)
-        writer.add_scalar("vae kld loss", kld.item(), current_step)
-        writer.add_scalar("vae R2 Score", r2.item(), current_step)
+
+        variational_logging(writer, "vae", loss.item(), mse.item(), kld.item(), r2_impl, batch_size, current_step)
 
     scheduler.step()
 
@@ -59,10 +72,32 @@ def variational_train(model, train_loader, val_loader, optimizer, scheduler, wri
 
             loss, mse, kld = variational_loss_func(batch_recon, batch, mu, sigma, beta)
 
-            r2 = r2_score(batch_recon, batch)
+            r2_impl = r2_score_self(batch, batch_recon)
+
+            batch_size = len(batch)
 
             current_step = epoch * num_log_steps + (val_iteration * num_log_steps) // len(val_loader)
-            writer_val.add_scalar("vae loss combined", loss.item(), current_step)
-            writer_val.add_scalar("vae mse loss", mse.item(), current_step)
-            writer_val.add_scalar("vae kld loss", kld.item(), current_step)
-            writer_val.add_scalar("vae R2 Score", r2.item(), current_step)
+
+            variational_logging(writer_val, "vae", loss.item(),
+                                mse.item(), kld.item(), r2_impl, batch_size,
+                                current_step)
+
+
+def variational_logging(writer, model_name, loss, mse, kld, r2, batch_size,
+                        current_step):
+    loss_scaled = loss / batch_size
+    mse_scaled = mse / batch_size
+    kld_scaled = kld / batch_size
+
+    writer.add_scalar(f"{model_name} loss combined", loss_scaled, current_step)
+    writer.add_scalar(f"{model_name} mse loss", mse_scaled, current_step)
+    writer.add_scalar(f"{model_name} kld loss", kld_scaled, current_step)
+    writer.add_scalar(f"{model_name} R2 Score", r2, current_step)
+
+
+def r2_score_self(y, y_pred):
+    """Compute the R² coefficient"""
+    residual = torch.sum((y - y_pred) ** 2)
+    total = torch.sum((y - torch.mean(y)) ** 2)
+    r2 = 1 - (residual / total)
+    return r2

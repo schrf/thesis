@@ -3,13 +3,14 @@ from torch import nn
 import torch.nn.functional as F
 
 class VAE(nn.Module):
-    def __init__(self, input_size, hidden_one_size, hidden_two_size, z_size):
+    def __init__(self, input_size, hidden_one_size, hidden_two_size, z_size, dropout):
         super().__init__()
 
         # encoder
         self.encoder = nn.Sequential(
             nn.Linear(input_size, hidden_one_size),
             nn.ReLU(),
+            nn.Dropout(p=dropout),
             nn.Linear(hidden_one_size, hidden_two_size),
             nn.ReLU()
         )
@@ -22,6 +23,7 @@ class VAE(nn.Module):
         self.decoder = nn.Sequential(
             nn.Linear(z_size, hidden_two_size),
             nn.ReLU(),
+            nn.Dropout(p=dropout),
             nn.Linear(hidden_two_size, hidden_one_size),
             nn.ReLU(),
             nn.Linear(hidden_one_size, input_size)

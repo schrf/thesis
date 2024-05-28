@@ -59,7 +59,10 @@ def create_pacmap_visualization_old(data, Y, metadata_column, title):
         num_categories = len(categories)
         
         # Generate distinct colors for each category
+        # old code using predefined plt colors
         colors = [mcolors.to_rgba(f'C{i}') for i in range(num_categories)]
+        # new code using Diyuans color generator:
+        # colors = generate_pastel_colors(num_categories)
         
         for i, category in enumerate(categories):
             mask = data[metadata_column] == category
@@ -93,7 +96,7 @@ def create_pacmap_visualization(data, Y, metadata_column, title):
         colormap_two = plt.colormaps.get_cmap('tab20b')
         colors_two = [colormap_two(i) for i in range(20)]
         tab20_duplicated = colors_one + colors_two
-        colors = tab20_duplicated[0:num_categories]
+        colors = generate_pastel_colors(num_categories)
                 
         for i, category in enumerate(categories):
             mask = data[metadata_column] == category
@@ -159,11 +162,13 @@ def filter_variants(df: DataFrame, filter: int):
     return selected_columns
 
 
-def pairwise_comparison(original, reconstructed):
+def pairwise_comparison(original, reconstructed, sample_names=None):
     """
     Plots multiple subplots, each containing two lines that represent gene expression samples. If N > 8, only the first 8 samples will be plotted
     :param original: NxD np array or pd DataFrame of original gene expression data
     :param reconstructed: NxD np array or pd DataFrame of reconstructed gene expression data
+    :param title: A optional string that contains the plot title
+    :param sample_names: a list of strings with the title of each sample. len(sample_names) should be 8
     :return: None
     """
 
@@ -173,18 +178,55 @@ def pairwise_comparison(original, reconstructed):
     if N > 8:
         N = 8
 
+    if sample_names is None:
+        sample_names = [f"Sample {i + 1}" for i in range(N)]
+
     fig, axes = plt.subplots(N, 1, figsize=(40, 4 * N), sharex=True)
 
     if N == 1:
         axes = [axes]  # Make sure axes is iterable if there's only one subplot
 
+    plt.rcParams.update({'font.size': 24})
+
     for i in range(N):
         axes[i].plot(original[i], label="original gene expression data", linewidth=line_size)
         axes[i].plot(reconstructed[i], label="reconstructed gene expression data", linewidth=line_size)
-        axes[i].legend()
-        axes[i].set_title(f'Sample {i+1}')
+        axes[i].legend(loc='upper right')
+        axes[i].set_title(sample_names[i])
 
     plt.xlabel('Index')
     plt.tight_layout()
     plt.show()
+
+
+def generate_pastel_colors(num_colors):
+    # Diyuans color generator
+
+    import random
+
+    def get_random_color(pastel_factor=0.5):
+        return [(x + pastel_factor) / (1.0 + pastel_factor) for x in [random.uniform(0, 1.0) for i in [1, 2, 3]]]
+
+    def color_distance(c1, c2):
+        return sum([abs(x[0] - x[1]) for x in zip(c1, c2)])
+
+    def generate_new_color(existing_colors, pastel_factor=0.5):
+        max_distance = None
+        best_color = None
+        for i in range(0, 100):
+            color = get_random_color(pastel_factor=pastel_factor)
+            if not existing_colors:
+                return color
+            best_distance = min([color_distance(color, c) for c in existing_colors])
+            if not max_distance or best_distance > max_distance:
+                max_distance = best_distance
+                best_color = color
+        return best_color
+
+    colors = []
+    for i in range(0, num_colors):
+        new_color = generate_new_color(colors, pastel_factor=0.9)
+        colors.append(new_color)
+
+    return colors
 

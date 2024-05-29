@@ -3,15 +3,16 @@ from torch import nn
 import torch.nn.functional as F
 
 class VAE(nn.Module):
-    def __init__(self, input_size, hidden_one_size, hidden_two_size, z_size, dropout):
+    def __init__(self, input_size, hidden_one_size, hidden_two_size, z_size):
         super().__init__()
 
         # encoder
         self.encoder = nn.Sequential(
             nn.Linear(input_size, hidden_one_size),
+            nn.BatchNorm1d(hidden_one_size),
             nn.ReLU(),
-            nn.Dropout(p=dropout),
             nn.Linear(hidden_one_size, hidden_two_size),
+            nn.BatchNorm1d(hidden_two_size),
             nn.ReLU()
         )
 
@@ -22,9 +23,10 @@ class VAE(nn.Module):
         # decoder
         self.decoder = nn.Sequential(
             nn.Linear(z_size, hidden_two_size),
+            nn.BatchNorm1d(hidden_two_size),
             nn.ReLU(),
-            nn.Dropout(p=dropout),
             nn.Linear(hidden_two_size, hidden_one_size),
+            nn.BatchNorm1d(hidden_one_size),
             nn.ReLU(),
             nn.Linear(hidden_one_size, input_size)
         )

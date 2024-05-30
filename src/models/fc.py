@@ -9,10 +9,8 @@ class VAE(nn.Module):
         # encoder
         self.encoder = nn.Sequential(
             nn.Linear(input_size, hidden_one_size),
-            nn.BatchNorm1d(hidden_one_size),
             nn.ReLU(),
             nn.Linear(hidden_one_size, hidden_two_size),
-            nn.BatchNorm1d(hidden_two_size),
             nn.ReLU()
         )
 
@@ -23,10 +21,8 @@ class VAE(nn.Module):
         # decoder
         self.decoder = nn.Sequential(
             nn.Linear(z_size, hidden_two_size),
-            nn.BatchNorm1d(hidden_two_size),
             nn.ReLU(),
             nn.Linear(hidden_two_size, hidden_one_size),
-            nn.BatchNorm1d(hidden_one_size),
             nn.ReLU(),
             nn.Linear(hidden_one_size, input_size)
         )

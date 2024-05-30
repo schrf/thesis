@@ -16,7 +16,7 @@ def variational_loss_func(x_recon, x , mu, sigma, beta):
     :param beta: weight of KLD
     :return: the summed loss, MSE and KLD
     """
-    mse = F.mse_loss(x_recon, x, reduction="sum")
+    mse = F.mse_loss(x_recon, x, reduction="mean")
     kld = -0.5 * torch.sum(1 + sigma - mu.pow(2) - sigma.exp())
     loss = mse + beta * kld
     return loss, mse, kld
@@ -55,11 +55,10 @@ def variational_train(model, train_loader, val_loader, optimizer, scheduler,
 
         r2_impl = r2_score_self(batch, batch_recon)
 
-        batch_size = len(batch)
 
         current_step = epoch * num_log_steps + (train_iteration * num_log_steps) // len(train_loader)
 
-        variational_logging(writer, "vae", loss.item(), mse.item(), kld.item(), r2_impl, batch_size, current_step)
+        variational_logging(writer, "vae", loss.item(), mse.item(), kld.item(), r2_impl, current_step)
 
     scheduler.step()
 
@@ -74,20 +73,20 @@ def variational_train(model, train_loader, val_loader, optimizer, scheduler,
 
             r2_impl = r2_score_self(batch, batch_recon)
 
-            batch_size = len(batch)
 
             current_step = epoch * num_log_steps + (val_iteration * num_log_steps) // len(val_loader)
 
             variational_logging(writer_val, "vae", loss.item(),
-                                mse.item(), kld.item(), r2_impl, batch_size,
+                                mse.item(), kld.item(), r2_impl,
                                 current_step)
 
 
-def variational_logging(writer, model_name, loss, mse, kld, r2, batch_size,
+def variational_logging(writer, model_name, loss, mse, kld, r2,
                         current_step):
-    loss_scaled = loss / batch_size
-    mse_scaled = mse / batch_size
-    kld_scaled = kld / batch_size
+    # when avg is used for mse calculation, no rescaling is required. Otherwise: e.g. loss / batch_size
+    loss_scaled = loss
+    mse_scaled = mse
+    kld_scaled = kld
 
     writer.add_scalar(f"{model_name} loss combined", loss_scaled, current_step)
     writer.add_scalar(f"{model_name} mse loss", mse_scaled, current_step)

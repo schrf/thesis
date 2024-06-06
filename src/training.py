@@ -53,12 +53,14 @@ def variational_train(model, train_loader, val_loader, optimizer, scheduler,
         loss.backward()
         optimizer.step()
 
-        r2_impl = r2_score_self(batch, batch_recon)
+        r2 = r2_score(batch, batch_recon)
 
 
-        current_step = epoch * num_log_steps + (train_iteration * num_log_steps) // len(train_loader)
+        current_step = (epoch * num_log_steps +
+                        (train_iteration * num_log_steps) // len(train_loader))
 
-        variational_logging(writer, "vae", loss.item(), mse.item(), kld.item(), r2_impl, current_step)
+        variational_logging(writer, "vae", loss.item(), mse.item(), kld.item(),
+                            r2, current_step)
 
     scheduler.step()
 
@@ -66,18 +68,19 @@ def variational_train(model, train_loader, val_loader, optimizer, scheduler,
 
     with torch.no_grad():
         for val_iteration, batch in enumerate(tqdm(val_loader, desc=f"Validation epoch {epoch + 1}")):
+
             batch = batch.to(device)
             batch_recon, mu, sigma = model(batch)
 
             loss, mse, kld = variational_loss_func(batch_recon, batch, mu, sigma, beta)
 
-            r2_impl = r2_score_self(batch, batch_recon)
+            r2 = r2_score(batch, batch_recon)
 
 
             current_step = epoch * num_log_steps + (val_iteration * num_log_steps) // len(val_loader)
 
             variational_logging(writer_val, "vae", loss.item(),
-                                mse.item(), kld.item(), r2_impl,
+                                mse.item(), kld.item(), r2,
                                 current_step)
 
 
@@ -94,7 +97,7 @@ def variational_logging(writer, model_name, loss, mse, kld, r2,
     writer.add_scalar(f"{model_name} R2 Score", r2, current_step)
 
 
-def r2_score_self(y, y_pred):
+def r2_score(y, y_pred):
     """Compute the R² coefficient"""
     residual = torch.sum((y - y_pred) ** 2)
     total = torch.sum((y - torch.mean(y)) ** 2)

@@ -4,7 +4,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import z_score normalization functions
-from src.data_visualization import z_score_normalization_rowwise, z_score_normalization_columnwise, filter_variants
+from src.data_visualization import z_score_normalization_rowwise, z_score_normalization_columnwise, filter_variance
 
 from abc import ABC, abstractmethod
 import pandas as pd
@@ -27,7 +27,7 @@ class Dataset(ABC):
                 data = z_score_normalization_rowwise(data, data.columns)
             if self.transform.get("most_variant") is not None:
                 n_genes = self.transform.get("most_variant")
-                data = data[filter_variants(data, n_genes)]
+                data = data[filter_variance(data, n_genes)]
 
         self.data = data
 

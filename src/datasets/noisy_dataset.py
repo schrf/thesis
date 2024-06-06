@@ -1,7 +1,7 @@
 import pandas as pd
 import torch
 
-from src.dataloaders_and_sets.base_dataset import Dataset
+from src.datasets.base_dataset import Dataset
 
 
 class NoisyDataset(Dataset):

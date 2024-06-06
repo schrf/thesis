@@ -25,7 +25,7 @@ def _combined_data_pacmap(data, viz_preprocessing, data_columns):
 
     if viz_preprocessing["only_most_variant"] is not None:
 
-        selected_columns = filter_variants(data[data_columns], viz_preprocessing["only_most_variant"])
+        selected_columns = filter_variance(data[data_columns], viz_preprocessing["only_most_variant"])
         # TODO: the above code doesn't work probably
         ## select data_columns for all genes or top_5000_columns for only the 5000 most variant:
         #variances = data[data_columns].var()
@@ -146,7 +146,7 @@ def z_score_normalization_columnwise(df, filter):
 
     return normalized_df
 
-def filter_variants(df: DataFrame, filter: int):
+def filter_variance(df: DataFrame, filter: int):
     """
     lists the columns of the most variant genes
     :param df: the gene expression dataframe

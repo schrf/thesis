@@ -6,7 +6,7 @@ from torcheval.metrics.functional import r2_score as r2_score_torch
 
 
 # loss function
-def variational_loss_func(x_recon, x , mu, sigma, beta):
+def variational_loss(x_recon, x, mu, sigma, beta):
     """
     calculates the MSE loss and KLD and sums them up weighted with beta (mse + beta * kld)
     :param x_recon: reconstruction data
@@ -48,12 +48,12 @@ def variational_train(model, train_loader, val_loader, optimizer, scheduler,
         batch = batch.to(device)
         batch_recon, mu, sigma = model(batch)
 
-        loss, mse, kld = variational_loss_func(batch_recon, batch, mu, sigma, beta)
+        loss, mse, kld = variational_loss(batch_recon, batch, mu, sigma, beta)
 
         loss.backward()
         optimizer.step()
 
-        r2 = r2_score(batch, batch_recon)
+        r2 = r2_score(batch.detach(), batch_recon.detach())
 
 
         current_step = (epoch * num_log_steps +
@@ -72,9 +72,9 @@ def variational_train(model, train_loader, val_loader, optimizer, scheduler,
             batch = batch.to(device)
             batch_recon, mu, sigma = model(batch)
 
-            loss, mse, kld = variational_loss_func(batch_recon, batch, mu, sigma, beta)
+            loss, mse, kld = variational_loss(batch_recon, batch, mu, sigma, beta)
 
-            r2 = r2_score(batch, batch_recon)
+            r2 = r2_score(batch.detach(), batch_recon.detach())
 
 
             current_step = epoch * num_log_steps + (val_iteration * num_log_steps) // len(val_loader)

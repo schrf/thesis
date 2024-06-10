@@ -4,7 +4,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import z_score normalization functions
-from src.data_visualization import z_score_normalization_rowwise, z_score_normalization_columnwise, filter_variance
+from src.data_transformation import z_score_normalization_rowwise, z_score_normalization_columnwise, filter_variance
 
 from abc import ABC, abstractmethod
 import pandas as pd
@@ -21,15 +21,16 @@ class Dataset(ABC):
         """
         self.transform = transform
         if self.transform is not None:
+            if self.transform.get("genes_filter") is not None:
+                genes_list = self.transform.get("genes_filter")
+                data = data[genes_list]
+
             if self.transform.get("z_score") == "per_gene":
                 data = z_score_normalization_columnwise(data, data.columns)
             elif self.transform.get("z_score") == "per_sample":
                 data = z_score_normalization_rowwise(data, data.columns)
-            if self.transform.get("most_variant") is not None:
-                n_genes = self.transform.get("most_variant")
-                data = data[filter_variance(data, n_genes)]
 
-        self.data = data
+        self.data = data.to_numpy()
 
     @abstractmethod
     def __getitem__(self, index):

@@ -1,7 +1,9 @@
 from pacmap import PaCMAP
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from pandas import DataFrame
+
+from src.data_transformation import z_score_normalization_rowwise, z_score_normalization_columnwise, filter_variance
+
 
 def combined_data_pacmap(data, viz_preprocessing):
     # Extract the data columns for Pacmap visualization
@@ -26,12 +28,6 @@ def _combined_data_pacmap(data, viz_preprocessing, data_columns):
     if viz_preprocessing["only_most_variant"] is not None:
 
         selected_columns = filter_variance(data[data_columns], viz_preprocessing["only_most_variant"])
-        # TODO: the above code doesn't work probably
-        ## select data_columns for all genes or top_5000_columns for only the 5000 most variant:
-        #variances = data[data_columns].var()
-
-        ## Sort variances in descending order and select the top 5000 columns
-        #selected_columns = variances.sort_values(ascending=False).head(viz_preprocessing["only_most_variant"]).index
     else:
         selected_columns = data_columns
     
@@ -44,38 +40,8 @@ def _combined_data_pacmap(data, viz_preprocessing, data_columns):
     create_pacmap_visualization(data, Y, 'age', 'Pacmap Visualization 5000 most variant genes: Age')
     create_pacmap_visualization(data, Y, 'dataset', 'Pacmap Visualization 5000 most variant genes: Dataset')
 
-# Helper function to create Pacmap visualization
-def create_pacmap_visualization_old(data, Y, metadata_column, title):
-    
-    # Plot the Pacmap visualization
-    plt.figure(figsize=(8, 6))
-    
-    # Color coding
-    if metadata_column == 'age':
-        scatter = plt.scatter(Y[:, 0], Y[:, 1], c=data['normalized_age'], cmap='viridis', s=1)
-        plt.colorbar(scatter, label='Relative Age')
-    else:
-        categories = data[metadata_column].unique()
-        num_categories = len(categories)
-        
-        # Generate distinct colors for each category
-        # old code using predefined plt colors
-        colors = [mcolors.to_rgba(f'C{i}') for i in range(num_categories)]
-        # new code using Diyuans color generator:
-        # colors = generate_pastel_colors(num_categories)
-        
-        for i, category in enumerate(categories):
-            mask = data[metadata_column] == category
-            plt.scatter(Y[mask, 0], Y[mask, 1], color=colors[i], label=category, s=1)
-        plt.legend(title=metadata_column, markerscale=10, bbox_to_anchor=(1.05, 1), loc='upper left')
-    
-    plt.title(title)
-    plt.xlabel('Dimension 1')
-    plt.ylabel('Dimension 2')
-    plt.show()
-
-# Helper function to create Pacmap visualization
 def create_pacmap_visualization(data, Y, metadata_column, title):
+    """Helper function to create Pacmap visualization"""
     
     # Plot the Pacmap visualization
     plt.figure(figsize=(8, 6))
@@ -110,56 +76,6 @@ def create_pacmap_visualization(data, Y, metadata_column, title):
     plt.xlabel('Dimension 1')
     plt.ylabel('Dimension 2')
     plt.show()
-
-def z_score_normalization_rowwise(df, filter):
-    # Calculate mean and standard deviation for each row
-    filtered_df = df.loc[:, filter]
-
-    # Calculate means and standard deviations for the filtered columns
-    means = filtered_df.mean(axis=1)
-    stds = filtered_df.std(axis=1)
-
-    # Subtract means from the filtered DataFrame and divide by standard deviations
-    normalized_filtered_df = filtered_df.sub(means, axis=0).div(stds, axis=0)
-
-    # Merge normalized values back into the original DataFrame
-    normalized_df = df.copy()  # Make a copy of the original DataFrame
-    normalized_df.loc[:, filter] = normalized_filtered_df  # Update filtered columns with normalized values
-
-    return normalized_df
-
-
-def z_score_normalization_columnwise(df, filter):
-    # Filter DataFrame to include only the columns specified in the filter
-    filtered_df = df.loc[:, filter]
-
-    # Calculate mean and standard deviation for each column in the filtered DataFrame
-    means = filtered_df.mean()
-    stds = filtered_df.std()
-    
-    # Apply z-score normalization to each column in the filtered DataFrame
-    normalized_filtered_df = (filtered_df - means) / stds
-    
-    # Merge normalized values back into the original DataFrame
-    normalized_df = df.copy()  # Make a copy of the original DataFrame
-    normalized_df.loc[:, filter] = normalized_filtered_df  # Update filtered columns with normalized values
-
-    return normalized_df
-
-def filter_variance(df: DataFrame, filter: int):
-    """
-    lists the columns of the most variant genes
-    :param df: the gene expression dataframe
-    :param filter: integer value indicating how many genes should be maintained
-    :return: the column names of the most variant genes
-    """
-    # select data_columns for all genes or top_5000_columns for only the 5000 most variant:
-    variances = df.var()
-
-    # Sort variances in descending order and select the most variant columns
-    selected_columns = variances.sort_values(ascending=False).head(filter).index
-
-    return selected_columns
 
 
 def pairwise_comparison(original, reconstructed, sample_names=None):

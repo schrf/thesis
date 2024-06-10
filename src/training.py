@@ -1,8 +1,11 @@
 import torch
+from torch import optim
 from tqdm import tqdm
 import torch.nn.functional as F
 from sklearn.metrics import r2_score as r2_score_sk
 from torcheval.metrics.functional import r2_score as r2_score_torch
+
+from src.models.fc import VAE
 
 
 # loss function
@@ -103,3 +106,82 @@ def r2_score(y, y_pred):
     total = torch.sum((y - torch.mean(y)) ** 2)
     r2 = 1 - (residual / total)
     return r2
+
+# for training without tensorboard logging (currently used in main.py):
+num_epochs = 10
+input_dim = 5000
+hidden_one_dim = 2048
+hidden_two_dim = 512
+latent_dim = 128
+learning_rate = 0.0001
+beta = 0.0002
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model = VAE(input_dim, hidden_one_dim, hidden_two_dim, latent_dim).to(device)
+criterion = variational_loss
+optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+
+def epochs_loop(train_loader, val_loader):
+    metrics = {
+        "train_loss": [],
+        "train_R2": [],
+        "val_loss": [],
+        "val_R2": []
+    }
+
+    for epoch in range(num_epochs):
+        train_loss, train_R2 = batch_train_loop(train_loader)
+        val_loss, val_R2 = batch_val_loop(val_loader)
+
+        metrics["train_loss"].append(train_loss)
+        metrics["train_R2"].append(train_R2)
+        metrics["val_loss"].append(val_loss)
+        metrics["val_R2"].append(val_R2)
+
+        print(f"Epoch {epoch+1}/{num_epochs} - "
+              f"Train Loss: {train_loss:.4f} - Train R2: {train_R2:.4f} - "
+              f"Val Loss: {val_loss:.4f} - Val R2: {val_R2:.4f}")
+
+    return metrics
+
+
+def batch_train_loop(train_loader):
+    model.train()
+    total_loss = 0
+    total_r2 = 0
+    count = 0
+
+    for batch in train_loader:
+        optimizer.zero_grad()
+
+        batch = batch.to(device)
+
+        outputs, mu, sigma = model(batch)
+        loss, _, _ = criterion(outputs, batch, mu, sigma, beta)
+        loss.backward()
+        optimizer.step()
+
+        total_loss += loss.item()
+        total_r2 += r2_score(batch.detach().cpu(), outputs.detach().cpu())
+        count += 1
+
+    return total_loss / count, total_r2 / count
+
+
+def batch_val_loop(val_loader):
+    model.eval()
+    total_loss = 0
+    total_r2 = 0
+    count = 0
+
+    with torch.no_grad():
+        for batch in val_loader:
+            batch = batch.to(device)
+            outputs, mu, sigma = model(batch)
+            loss, _, _ = criterion(outputs, batch, mu, sigma, beta)
+
+            total_loss += loss.item()
+            total_r2 += r2_score(batch.detach().cpu(), outputs.detach().cpu())
+            count += 1
+
+    return total_loss / count, total_r2 / count

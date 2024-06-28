@@ -22,7 +22,7 @@ class Dataset(torch.utils.data.Dataset):
 
 def main():
     if len(sys.argv) < 3 or len(sys.argv) > 3:
-        print("Usage: python script.py <ccle_path> <tcga_path>")
+        print("Usage: python main.py <ccle_path> <tcga_path>")
         sys.exit(1)
 
     # train-val split should stay the same using a seed

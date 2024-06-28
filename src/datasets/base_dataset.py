@@ -1,5 +1,8 @@
 import sys
 import os
+from typing import Tuple
+
+import torch
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -15,7 +18,7 @@ class Dataset(ABC):
     """
     def __init__(self, data: pd.DataFrame, transform=None):
         """
-
+        initializes the dataset
         :param data: data (without any additional labels)
         :param transform: a set that contains the transformation applied to the data
         """
@@ -29,12 +32,12 @@ class Dataset(ABC):
                 data = z_score_normalization_columnwise(data, data.columns)
             elif self.transform.get("z_score") == "per_sample":
                 data = z_score_normalization_rowwise(data, data.columns)
-
+        self.indices = data.index
         self.data = data.to_numpy()
 
     @abstractmethod
-    def __getitem__(self, index):
-        """Return data sample at given index and transform it according to the transform set"""
+    def __getitem__(self, index) -> Tuple[torch.Tensor, str]:
+        """Return 1. data sample at given index and transform it according to the transform set; 2. Returns the index"""
 
     def __len__(self):
         """Return the number of samples in the dataset"""

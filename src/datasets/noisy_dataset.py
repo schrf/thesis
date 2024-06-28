@@ -13,8 +13,8 @@ class NoisyDataset(Dataset):
         self.var = var
 
     def __getitem__(self, index):
-        tensor = torch.tensor(self.data.iloc[index], dtype=torch.float32)
-        return self.add_gaussian_noise(tensor)
+        tensor = torch.tensor(self.data[index], dtype=torch.float32)
+        return self.add_gaussian_noise(tensor), self.indices[index]
 
     def add_gaussian_noise(self, data):
         noise = (self.var**0.5)*torch.randn(data.shape)

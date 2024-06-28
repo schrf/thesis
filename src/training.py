@@ -154,6 +154,7 @@ def batch_train_loop(train_loader):
     for batch in train_loader:
         optimizer.zero_grad()
 
+        batch, _ = batch
         batch = batch.to(device)
 
         outputs, mu, sigma = model(batch)
@@ -176,6 +177,7 @@ def batch_val_loop(val_loader):
 
     with torch.no_grad():
         for batch in val_loader:
+            batch, _ = batch
             batch = batch.to(device)
             outputs, mu, sigma = model(batch)
             loss, _, _ = criterion(outputs, batch, mu, sigma, beta)

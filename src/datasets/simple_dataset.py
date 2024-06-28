@@ -8,4 +8,4 @@ class SimpleDataset(Dataset):
         super().__init__(data, transform)
 
     def __getitem__(self, index):
-        return torch.tensor(self.data[index], dtype=torch.float32)
+        return torch.tensor(self.data[index], dtype=torch.float32), self.indices[index]

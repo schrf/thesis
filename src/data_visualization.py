@@ -1,52 +1,77 @@
 from pacmap import PaCMAP
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+import phate
 
 from src.data_transformation import z_score_normalization_rowwise, z_score_normalization_columnwise, filter_variance
 
+metadata_columns = ['primary_disease', 'gender', 'age', 'dataset']
 
-def combined_data_pacmap(data, viz_preprocessing):
-    # Extract the data columns for Pacmap visualization
-    data_columns = [col for col in data.columns if col not in ['primary_disease', 'gender', 'age', 'dataset', 'normalized_age']]
+def combined_data_pacmap(data, metadata, transform):
+    if transform is not None:
+        if transform.get("genes_filter") is not None:
+            genes_list = transform.get("genes_filter")
+            data = data[genes_list]
 
-    if viz_preprocessing["z_score_norm"] == "per_gene":
-        data = z_score_normalization_columnwise(data, data_columns)
-    elif viz_preprocessing["z_score_norm"] == "per_sample":
-        data = z_score_normalization_rowwise(data, data_columns)
+        if transform.get("z_score") == "per_gene":
+            data = z_score_normalization_columnwise(data, data.columns)
+        elif transform.get("z_score") == "per_sample":
+            data = z_score_normalization_rowwise(data, data.columns)
 
-    _combined_data_pacmap(data, viz_preprocessing, data_columns)
+    _combined_data_pacmap(data, metadata, transform)
 
 
-def _combined_data_pacmap(data, viz_preprocessing, data_columns):
-    # Step 1: Drop NaN values and normalize the age column
-    data.dropna(inplace=True)
-    data['normalized_age'] = (data['age'] - data['age'].min()) / (data['age'].max() - data['age'].min())
+def only_data_columns(data):
+    extended_metadata_columns = metadata_columns
+    if 'normalized_age' in data.columns:
+        extended_metadata_columns.append('normalized_age')
 
-    # Initialize Pacmap
-    model = PaCMAP()
+    data_columns = [col for col in data.columns if
+                    col not in extended_metadata_columns]
+    return data_columns
 
-    if viz_preprocessing["only_most_variant"] is not None:
 
-        selected_columns = filter_variance(data[data_columns], viz_preprocessing["only_most_variant"])
+def _combined_data_pacmap(data, metadata, transform):
+    # Step 1: fill NaN values and normalize the age column
+    metadata['gender'].fillna('unknown', inplace=True)
+    data = data.fillna(0)
+    metadata.loc[:, 'normalized_age'] = (metadata['age'] - metadata['age'].min()) / (metadata['age'].max() - metadata['age'].min())
+
+    # Initialize Pacmap with PaCMAP() or PHATE with phate.PHATE(n_jobs=-2)
+    model = phate.PHATE(n_jobs=-2)
+    model_name = "PHATE"
+
+    # extract the preprocessing information for showing it in the plots
+    transform_string = "transformation: "
+    if transform is None:
+        transform_string += "None"
     else:
-        selected_columns = data_columns
-    
+        genes_transform = "no gene filter"
+        if transform.get("genes_filter") is not None:
+            genes_transform = f"{len(transform.get('genes_filter'))} most variant genes"
+
+        z_score_transform = "no z_score normalization"
+        if transform.get("z_score") is not None:
+            z_score_transform = f"{transform.get('z_score')} z-score normalization"
+
     # Fit the model
-    Y = model.fit_transform(data[selected_columns])
+    Y = model.fit_transform(data)
 
     # Visualizations
-    create_pacmap_visualization(data, Y, 'primary_disease', 'Pacmap Visualization 5000 most variant genes: Primary Disease')
-    create_pacmap_visualization(data, Y, 'gender', 'Pacmap Visualization 5000 most variant genes: Gender')
-    create_pacmap_visualization(data, Y, 'age', 'Pacmap Visualization 5000 most variant genes: Age')
-    create_pacmap_visualization(data, Y, 'dataset', 'Pacmap Visualization 5000 most variant genes: Dataset')
+    create_pacmap_visualization(metadata, Y, 'primary_disease', f'{model_name} Visualization of: Primary Disease')
+    create_pacmap_visualization(metadata, Y, 'gender', f'{model_name} Visualization of: Gender')
+    create_pacmap_visualization(metadata, Y, 'age', f'{model_name} Visualization of: Age')
+    create_pacmap_visualization(metadata, Y, 'dataset', f'{model_name} Visualization of: Dataset')
 
 def create_pacmap_visualization(data, Y, metadata_column, title):
     """Helper function to create Pacmap visualization"""
-    
-    # Plot the Pacmap visualization
-    plt.figure(figsize=(8, 6))
 
-    dot_size = 1
+    # Plot the Pacmap visualization
+    plt.figure(figsize=(16, 12))
+
+    plt.rcParams['font.size'] = 16
+
+    dot_size = 2
     
     # Color coding
     if metadata_column == 'age':
@@ -54,15 +79,14 @@ def create_pacmap_visualization(data, Y, metadata_column, title):
         plt.colorbar(scatter, label='Relative Age')
     else:
         categories = data[metadata_column].unique()
-        num_categories = len(categories)
-        
+
         # Generate distinct colors for each category
         colormap_one = plt.colormaps.get_cmap('tab20')
         colors_one = [colormap_one(i) for i in range(20)]
         colormap_two = plt.colormaps.get_cmap('tab20b')
         colors_two = [colormap_two(i) for i in range(20)]
         tab20_duplicated = colors_one + colors_two
-        colors = generate_pastel_colors(num_categories)
+        colors = tab20_duplicated
                 
         for i, category in enumerate(categories):
             mask = data[metadata_column] == category
@@ -72,7 +96,7 @@ def create_pacmap_visualization(data, Y, metadata_column, title):
         
         plt.legend(title=metadata_column, markerscale=5, bbox_to_anchor=(1.05, 1), loc='upper left')
     
-    plt.title(title)
+    plt.title(title, fontsize=22)
     plt.xlabel('Dimension 1')
     plt.ylabel('Dimension 2')
     plt.show()

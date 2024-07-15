@@ -1,3 +1,4 @@
+import pandas as pd
 from pandas import DataFrame
 
 
@@ -50,3 +51,30 @@ def filter_variance(df: DataFrame, filter: int):
     selected_columns = variances.sort_values(ascending=False).head(filter).index
 
     return selected_columns
+
+def combine_ccle_tcga(ccle_genes, ccle_meta, tcga_genes, tcga_meta):
+    tcga_ccle_age = pd.concat([ccle_meta["age"], tcga_meta["cgc_case_age_at_diagnosis"]])
+
+    tcga_ccle_diagnosis = pd.concat([ccle_meta["diagnosis"], tcga_meta["diagnosis"]])
+
+    tcga_ccle_gender = pd.concat([ccle_meta["sex"].str.lower(), tcga_meta["gdc_cases.demographic.gender"].fillna("unknown")])
+
+    tcga_dataset = pd.Series(["tcga"] * len(tcga_meta), index=tcga_meta.index)
+    ccle_dataset = pd.Series(["ccle"] * len(ccle_meta), index=ccle_meta.index)
+
+    tcga_ccle_dataset = pd.concat([ccle_dataset, tcga_dataset])
+
+    tcga_ccle_purity = pd.concat([pd.Series([100.0] * len(ccle_meta), index=ccle_meta.index, name="cancer_purity"), tcga_meta["tumor_percent"]])
+    tcga_ccle_purity = tcga_ccle_purity / 100
+
+    tcga_ccle_meta = pd.DataFrame({
+        "dataset": tcga_ccle_dataset,
+        "gender": tcga_ccle_gender,
+        "diagnosis": tcga_ccle_diagnosis,
+        "age": tcga_ccle_age,
+        "cancer_purity": tcga_ccle_purity
+    })
+
+    tcga_ccle_genes = pd.concat([ccle_genes, tcga_genes])
+
+    return tcga_ccle_genes, tcga_ccle_meta

@@ -16,7 +16,7 @@ class Dataset(ABC):
     """
     Abstract base class for all datasets
     """
-    def __init__(self, data: pd.DataFrame, transform=None):
+    def __init__(self, genes: pd.DataFrame, meta: pd.DataFrame, transform=None):
         """
         initializes the dataset
         :param data: data (without any additional labels)
@@ -26,20 +26,21 @@ class Dataset(ABC):
         if self.transform is not None:
             if self.transform.get("genes_filter") is not None:
                 genes_list = self.transform.get("genes_filter")
-                data = data[genes_list]
+                genes = genes[genes_list]
 
             if self.transform.get("z_score") == "per_gene":
-                data = z_score_normalization_columnwise(data, data.columns)
+                genes = z_score_normalization_columnwise(genes, genes.columns)
             elif self.transform.get("z_score") == "per_sample":
-                data = z_score_normalization_rowwise(data, data.columns)
-        self.indices = data.index
-        self.data = data.to_numpy()
+                genes = z_score_normalization_rowwise(genes, genes.columns)
+        self.indices = genes.index
+        self.genes = genes.to_numpy()
+        self.meta = meta
 
     @abstractmethod
-    def __getitem__(self, index) -> Tuple[torch.Tensor, str]:
+    def __getitem__(self, index) -> Tuple[torch.Tensor, torch.Tensor, str]:
         """Return 1. data sample at given index and transform it according to the transform set; 2. Returns the index"""
 
     def __len__(self):
         """Return the number of samples in the dataset"""
-        return len(self.data)
+        return len(self.genes)
 

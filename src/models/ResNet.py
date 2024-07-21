@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
-from torchvision.models import resnet18
 
 # Encoder based on ResNet-18
 class ResidualBlock1D(nn.Module):
@@ -27,29 +25,36 @@ class ResidualBlock1D(nn.Module):
         out = F.relu(out)
         return out
 
-class ResNet1DEncoder(nn.Module):
-    def __init__(self, in_channels, latent_dim):
-        super().__init__()
-        self.in_channels = in_channels
-        self.latent_dim = latent_dim
-        self.fc1 = nn.Linear(self.in_channels, 1500)
-        self.fc2 = nn.Linear(1500, 500)
-        self.fc3 = nn.Linear(500, 200)
-        self.mu = nn.Linear(200, out_features=latent_dim)
-        self.sigma = nn.Linear(200, out_features=latent_dim)
+class Encoder(nn.Module):
+    def __init__(self, latent_dim, input_length):
+        super(Encoder, self).__init__()
+        self.conv1 = nn.Conv1d(1, 4, kernel_size=5, stride=1, padding=2)
+        self.conv2 = nn.Conv1d(4, 8, kernel_size=5, stride=1, padding=1)
+        self.conv3 = nn.Conv1d(8, 16, kernel_size=5, stride=1, padding=0)
+        self.conv4 = nn.Conv1d(16, 24, kernel_size=5, stride=1, padding=0)
+        self.conv5 = nn.Conv1d(24, 32, kernel_size=5, stride=1, padding=1)
+        self.conv6 = nn.Conv1d(32, 48, kernel_size=3, stride=1, padding=1)
+        self.conv7 = nn.Conv1d(48, 60, kernel_size=3, stride=1, padding=0)
+        self.conv8 = nn.Conv1d(60, 64, kernel_size=3, stride=1, padding=0)
+        self.fc = nn.Linear(64 * 273, latent_dim * 2)
+
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        mu = self.mu(x)
-        sigma = self.sigma(x)
-        return mu, sigma
-# Variational Sampling
-def reparameterize(mean, logvar):
-    std = torch.exp(0.5 * logvar)
-    eps = torch.randn_like(std)
-    return mean + eps * std
+        x = x.unsqueeze(1)  # Add a channel dimension
+        x = F.relu((self.conv1(x)))
+        x = F.relu((self.conv2(x)))
+        x = F.max_pool1d(x, kernel_size=2, stride=2)
+        x = F.relu((self.conv3(x)))
+        x = F.relu((self.conv4(x)))
+        x = F.max_pool1d(x, kernel_size=2, stride=2)
+        x = F.relu((self.conv5(x)))
+        x = F.relu((self.conv6(x)))
+        x = F.max_pool1d(x, kernel_size=3, stride=3)
+        x = F.relu((self.conv7(x)))
+        x = F.relu((self.conv8(x)))
+        x = x.view(x.size(0), -1)
+        mean, logvar = torch.chunk(self.fc(x), 2, dim=1)
+        return mean, logvar
 
 # Decoder
 class Decoder(nn.Module):
@@ -69,17 +74,23 @@ class RegressionHead(nn.Module):
     def forward(self, z):
         return self.fc(z)
 
+# Variational Sampling
+def reparameterize(mean, logvar):
+    std = torch.exp(0.5 * logvar)
+    eps = torch.randn_like(std)
+    return mean + eps * std
+
 # Full Model
 class MultiTaskVAE(nn.Module):
     def __init__(self, input_dim, latent_dim):
         super(MultiTaskVAE, self).__init__()
-        self.encoder = ResNet1DEncoder(input_dim, latent_dim)
+        self.encoder = Encoder(latent_dim=latent_dim, input_length=input_dim)
         self.decoder = Decoder(latent_dim, input_dim)
         self.regression_head = RegressionHead(latent_dim)
 
     def forward(self, x):
-        mean, sigma = self.encoder(x)
-        z = reparameterize(mean, sigma)
+        mean, logvar = self.encoder(x)
+        z = reparameterize(mean, logvar)
         recon_x = self.decoder(z)
         reg_y = self.regression_head(z)
-        return recon_x, reg_y, mean, sigma
+        return recon_x, reg_y, mean, logvar

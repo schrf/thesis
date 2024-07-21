@@ -56,6 +56,7 @@ def combine_ccle_tcga(ccle_genes, ccle_meta, tcga_genes, tcga_meta):
     tcga_ccle_age = pd.concat([ccle_meta["age"], tcga_meta["cgc_case_age_at_diagnosis"]])
 
     tcga_ccle_diagnosis = pd.concat([ccle_meta["diagnosis"], tcga_meta["diagnosis"]])
+    tcga_ccle_diagnosis = tcga_ccle_diagnosis.apply(lambda x: 'UNABLE TO CLASSIFY' if pd.isna(x) or x == '0' else x)
 
     tcga_ccle_gender = pd.concat([ccle_meta["sex"].str.lower(), tcga_meta["gdc_cases.demographic.gender"].fillna("unknown")])
 

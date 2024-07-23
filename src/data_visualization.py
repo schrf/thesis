@@ -81,7 +81,7 @@ def scatter_plot_gradient(Y, metadata, title=None, output_dir=None):
         print("saving plot in " + file_path)
         plt.savefig(file_path, bbox_inches='tight')
 
-def pairwise_comparison(original, reconstructed, sample_names=None):
+def pairwise_comparison(original, reconstructed, sample_names=None, output_file=None):
     """
     Plots multiple subplots, each containing two lines that represent gene expression samples. If N > 8, only the first 8 samples will be plotted
     :param original: NxD np array or pd DataFrame of original gene expression data
@@ -115,7 +115,10 @@ def pairwise_comparison(original, reconstructed, sample_names=None):
 
     plt.xlabel('Index')
     plt.tight_layout()
-    plt.show()
+    if output_file is None:
+        plt.show()
+    else:
+        plt.savefig(output_file)
 
 
 def generate_pastel_colors(num_colors):

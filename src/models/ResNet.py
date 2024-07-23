@@ -1,3 +1,5 @@
+import sys
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -28,30 +30,21 @@ class ResidualBlock1D(nn.Module):
 class Encoder(nn.Module):
     def __init__(self, latent_dim, input_length):
         super(Encoder, self).__init__()
-        self.conv1 = nn.Conv1d(1, 4, kernel_size=5, stride=1, padding=2)
-        self.conv2 = nn.Conv1d(4, 8, kernel_size=5, stride=1, padding=1)
-        self.conv3 = nn.Conv1d(8, 16, kernel_size=5, stride=1, padding=0)
-        self.conv4 = nn.Conv1d(16, 24, kernel_size=5, stride=1, padding=0)
-        self.conv5 = nn.Conv1d(24, 32, kernel_size=5, stride=1, padding=1)
-        self.conv6 = nn.Conv1d(32, 48, kernel_size=3, stride=1, padding=1)
-        self.conv7 = nn.Conv1d(48, 60, kernel_size=3, stride=1, padding=0)
-        self.conv8 = nn.Conv1d(60, 64, kernel_size=3, stride=1, padding=0)
-        self.fc = nn.Linear(64 * 273, latent_dim * 2)
 
+        self.resblock1 = ResidualBlock1D(in_channels=1, out_channels=4)
+        self.resblock2 = ResidualBlock1D(in_channels=4, out_channels=6)
+        self.resblock3 = ResidualBlock1D(in_channels=6, out_channels=10)
+        self.resblock4 = ResidualBlock1D(in_channels=10, out_channels=15)
+        self.fc = nn.Linear(15 * input_length, 2 * latent_dim)
 
     def forward(self, x):
         x = x.unsqueeze(1)  # Add a channel dimension
-        x = F.relu((self.conv1(x)))
-        x = F.relu((self.conv2(x)))
-        x = F.max_pool1d(x, kernel_size=2, stride=2)
-        x = F.relu((self.conv3(x)))
-        x = F.relu((self.conv4(x)))
-        x = F.max_pool1d(x, kernel_size=2, stride=2)
-        x = F.relu((self.conv5(x)))
-        x = F.relu((self.conv6(x)))
-        x = F.max_pool1d(x, kernel_size=3, stride=3)
-        x = F.relu((self.conv7(x)))
-        x = F.relu((self.conv8(x)))
+        x = self.resblock1(x)
+        x = self.resblock2(x)
+        # x = F.max_pool1d(x, kernel_size=2, stride=2)
+        x = self.resblock3(x)
+        x = self.resblock4(x)
+        # x = F.max_pool1d(x, kernel_size=2, stride=2)
         x = x.view(x.size(0), -1)
         mean, logvar = torch.chunk(self.fc(x), 2, dim=1)
         return mean, logvar
@@ -60,19 +53,28 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
     def __init__(self, latent_dim, output_dim):
         super(Decoder, self).__init__()
-        self.fc = nn.Linear(latent_dim, output_dim)
+
+        self.output_dim = output_dim
+        self.fc = nn.Linear(latent_dim, output_dim * 15)
+        self.conv1 = nn.ConvTranspose1d
 
     def forward(self, z):
-        return self.fc(z)
+        z = self.fc(z)
+        return z
 
-# Regression Head
+# Regression Head:
 class RegressionHead(nn.Module):
     def __init__(self, latent_dim):
         super(RegressionHead, self).__init__()
-        self.fc = nn.Linear(latent_dim, 1)
+        self.fc1 = nn.Linear(latent_dim, int(latent_dim / 2))
+        self.fc2 = nn.Linear(int(latent_dim / 2), int(latent_dim / 4))
+        self.fc3 = nn.Linear(int(latent_dim / 4), 1)
 
     def forward(self, z):
-        return self.fc(z)
+        z = F.relu(self.fc1(z))
+        z = F.relu(self.fc2(z))
+        z = F.relu(self.fc3(z))
+        return z
 
 # Variational Sampling
 def reparameterize(mean, logvar):

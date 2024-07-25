@@ -55,8 +55,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
 
         self.output_dim = output_dim
-        self.fc = nn.Linear(latent_dim, output_dim * 15)
-        self.conv1 = nn.ConvTranspose1d
+        self.fc = nn.Linear(latent_dim, output_dim)
 
     def forward(self, z):
         z = self.fc(z)

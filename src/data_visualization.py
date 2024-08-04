@@ -1,8 +1,13 @@
+import datetime
+import os
 import os.path
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import phate
+import torch
+from matplotlib import pyplot as plt
+
 
 def scatter_plot_classes(Y, metadata, title=None, output_dir=None):
     """
@@ -119,6 +124,7 @@ def pairwise_comparison(original, reconstructed, sample_names=None, output_file=
         plt.show()
     else:
         plt.savefig(output_file)
+    plt.close()
 
 
 def generate_pastel_colors(num_colors):
@@ -160,3 +166,101 @@ def tab_forty():
     colors_two = [colormap_two(i) for i in range(20)]
     tab20_duplicated = colors_one + colors_two
     return tab20_duplicated
+
+
+def plot_results(metrics, model, val_set, plot_dir):
+    """
+
+    :param metrics:
+    :param model:
+    :param val_set:
+    :param plot_dir:
+    :return:
+    """
+    current_epoch = len(metrics["train_loss"])
+    plot_dir = plot_dir + f"/epoch {current_epoch}"
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
+    epochs = range(1, current_epoch + 1)
+
+    device_used = get_model_device(model)
+
+    # Plot overall loss curves
+    plt.figure()
+    plt.plot(epochs, metrics["train_loss"], label="Train Loss")
+    plt.plot(epochs, metrics["val_loss"], label="Validation Loss")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.title("Train and Validation Loss")
+    plt.legend()
+    plt.savefig(plot_dir + "/loss_curves.png")
+    plt.close()
+
+    # Plot R2 score curves
+    plt.figure()
+    plt.plot(epochs, metrics["train_R2"], label="Train R2")
+    plt.plot(epochs, metrics["val_R2"], label="Validation R2")
+    plt.xlabel("Epochs")
+    plt.ylabel("R2 Score")
+    plt.title("Train and Validation R2 Score")
+    plt.legend()
+    plt.savefig(plot_dir + "/r2_curves.png")
+    plt.close()
+
+    # Plot all three train losses
+    plt.figure()
+    plt.plot(epochs, metrics["train_recon"], label="Train Reconstruction Loss")
+    plt.plot(epochs, metrics["train_reg"], label="Train Purity Loss")
+    plt.plot(epochs, metrics["train_kl"], label="Train KLD Loss")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.title("Multitask Train Losses")
+    plt.legend()
+    plt.savefig(plot_dir + "/train_losses.png")
+    plt.close()
+
+    # Plot all three validation losses
+    plt.figure()
+    plt.plot(epochs, metrics["val_recon"], label="Validation Reconstruction Loss")
+    plt.plot(epochs, metrics["val_reg"], label="Validation Purity Loss")
+    plt.plot(epochs, metrics["val_kl"], label="Validation KLD Loss")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.title("Multitask Validation Losses")
+    plt.legend()
+    plt.savefig(plot_dir + "/val_losses.png")
+    plt.close()
+
+    # Plot the two weights
+    plt.figure()
+    plt.plot(epochs, metrics["w1"], label="Reconstruction Weight")
+    plt.plot(epochs, metrics["w2"], label="Purity Weight")
+    plt.xlabel("Epochs")
+    plt.ylabel("Weight")
+    plt.title("Task Weights")
+    plt.legend()
+    plt.savefig(plot_dir + "/task_weights.png")
+    plt.close()
+
+    # Plot the reconstructed samples and predicted purities against the original values
+    viz_loader = torch.utils.data.DataLoader(val_set, batch_size=128, shuffle=True)
+    model.cpu().eval()
+
+    with torch.no_grad():
+        x, w, _ = next(iter(viz_loader))
+        x_hat, w_hat, _, _ = model(x)
+
+    # plot reconstruction against original samples
+    pairwise_comparison(x, x_hat, output_file=plot_dir + "/samples_gene_expression.png")
+
+    # plot predicted against original purity
+    w = w.view(1, -1)
+    w_hat = w_hat.view(1, -1)
+    pairwise_comparison(w, w_hat, output_file=plot_dir + "/samples_purity.png")
+
+    model.to(device_used)
+
+
+
+def get_model_device(model):
+    return next(model.parameters()).device

@@ -1,4 +1,6 @@
 import datetime
+import os
+
 import torch
 from torch import optim
 from torch.nn import L1Loss
@@ -12,12 +14,12 @@ from src.models.ResNet import MultiTaskVAE
 
 # initializations for the model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-num_epochs = 60
+num_epochs = 50
 input_dim = 3350
 latent_dim = 64
-lr = 0.001
+lr = 0.0001
 lr_scaling = lr
-kl_loss_weight = 0.0001
+kl_loss_weight = 0.00001
 model = MultiTaskVAE(input_dim, latent_dim).to(device)
 optimizer = optim.Adam(model.parameters(), lr=lr)
 
@@ -27,7 +29,7 @@ Weightloss2 = torch.tensor([1.0], requires_grad=True, device=device)
 params = [Weightloss1, Weightloss2]
 scaling_optimizer = optim.Adam(params, lr=lr_scaling)
 Gradloss = L1Loss()
-alpha = 0.8
+alpha = 0.12
 l0_recon = None
 l0_purity = None
 
@@ -40,7 +42,8 @@ def KLD(mu, sigma):
 
 
 def MSE(x_recon, x):
-    """calculate MSE. If x contains NaN, then it will be masked and the loss will only be calculated based on other values"""
+    """calculate MSE. If x contains NaN, then it will be masked and the loss
+    will only be calculated based on other values"""
     mask = ~torch.isnan(x)
 
     # Use the mask to filter out NaN values in both input and target tensors
@@ -64,7 +67,7 @@ def r2_score(y, y_pred):
     return r2
 
 
-def epochs_loop(train_loader, val_loader, val_set, plot_comment):
+def epochs_loop(train_loader, val_loader, train_set, val_set, plot_comment):
     metrics = {
         "train_loss": [],
         "train_R2": [],
@@ -88,6 +91,11 @@ def epochs_loop(train_loader, val_loader, val_set, plot_comment):
         plot_comment = " " + plot_comment
     plot_dir = "plots/multitask/" + formatted_time + plot_comment
 
+    if not os.path.exists(plot_dir):
+        os.mkdir(plot_dir)
+
+    save_metadata(plot_dir)
+
     for epoch in range(num_epochs):
         train_loss, train_recon, train_reg, train_kl, train_R2, w1, w2 = batch_train_loop(train_loader, epoch)
         val_loss, val_recon, val_reg, val_kl, val_R2 = batch_val_loop(val_loader)
@@ -109,9 +117,8 @@ def epochs_loop(train_loader, val_loader, val_set, plot_comment):
               f"Train Loss: {train_loss:.4f} - Train R2: {train_R2:.4f} - "
               f"Val Loss: {val_loss:.4f} - Val R2: {val_R2:.4f}")
 
-        plot_results(metrics, model, val_set, plot_dir)
+        plot_results(metrics, model, train_set, val_set, plot_dir)
 
-    plot_results(metrics, model, val_set, plot_dir)
     return metrics, model
 
 
@@ -138,7 +145,7 @@ def batch_train_loop(train_loader, epoch):
         recon_loss = params[0] * MSE(x_hat, x)
         purity_loss = params[1] * MSE(w_hat, w)
         kl_loss = KLD(mu, sigma) * kl_loss_weight
-        loss = torch.div(torch.add(recon_loss, purity_loss), 2)
+        loss = torch.div(torch.add(recon_loss, purity_loss), 2) + kl_loss
 
         # for the first epoch with no l0
         if epoch == 0:
@@ -151,13 +158,12 @@ def batch_train_loop(train_loader, epoch):
 
         last_common_layer = model.encoder.fc.weight
 
-        #TODO: check why G1 and G2 are Python floats instead of pytorch tensors and if the warning "Using a target size (torch.Size([1])) that is different to the input size (torch.Size([]))" is a problem
+        #TODO: check why G1 and G2 are Python floats instead of pytorch tensors and if the warning
+        # "Using a target size (torch.Size([1])) that is different to the input size (torch.Size([]))" is a problem
 
         # Getting gradients of the first layers of each task and calculate the gradients l2-norm
         G1R = torch.autograd.grad(recon_loss, last_common_layer, retain_graph=True, create_graph=True)
-        # print(f"G1R: {G1R}")
         G1 = torch.norm(G1R[0], 2)
-        # print(f"G1: {G1}")
         G2R = torch.autograd.grad(purity_loss, last_common_layer, retain_graph=True, create_graph=True)
         G2 = torch.norm(G2R[0], 2)
         G_avg = torch.div(torch.add(G1, G2), 2)
@@ -179,12 +185,10 @@ def batch_train_loop(train_loader, epoch):
 
         scaling_optimizer.zero_grad()
 
-        # print(f"G1 = {G1}, G2 = {G2}, C1 = {C1}, C2 = {C2}")
         # Calculating the gradient loss according to Eq. 2 in the GradNorm paper
         Lgrad = torch.add(Gradloss(G1, C1),Gradloss(G2, C2))
         Lgrad.backward()
 
-        # print("text")
         # Updating loss weights
         scaling_optimizer.step()
 
@@ -226,10 +230,10 @@ def batch_val_loop(val_loader):
             x, w = x.to(device), w.to(device)
 
             x_hat, w_hat, mu, sigma = model(x)
-            recon_loss = MSE(x_hat, x)
-            purity_loss = MSE(w_hat, w)
-            kl_loss = KLD(mu, sigma)
-            loss = recon_loss_weight * recon_loss + kl_loss_weight * kl_loss + reg_head_weight * purity_loss
+            recon_loss = recon_loss_weight * MSE(x_hat, x)
+            purity_loss = reg_head_weight * MSE(w_hat, w)
+            kl_loss = KLD(mu, sigma) * kl_loss_weight
+            loss = torch.div(torch.add(recon_loss, purity_loss), 2) + kl_loss
 
             total_loss += loss.item() / count
             total_kl_loss += kl_loss.item() / count
@@ -237,4 +241,17 @@ def batch_val_loop(val_loader):
             total_recon_loss += recon_loss.item() / count
             total_r2 += r2_score(x.detach().cpu(), x_hat.detach().cpu()) / count
 
-    return total_loss, total_recon_loss * recon_loss_weight, total_reg_loss * reg_head_weight, total_kl_loss * kl_loss_weight, total_r2
+    return (total_loss, total_recon_loss, total_reg_loss,
+            total_kl_loss, total_r2)
+
+def save_metadata(plot_dir):
+    with open(plot_dir + '/metadata.txt', 'w') as f:
+        data = f"""num_epochs = {num_epochs}
+                input_dim = {input_dim}
+                latent_dim = {latent_dim}
+                lr = {lr}
+                lr_scaling = {lr_scaling}
+                kl_loss_weight = {kl_loss_weight}
+                alpha = {alpha}
+                """
+        f.write(data)

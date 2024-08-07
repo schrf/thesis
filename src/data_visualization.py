@@ -4,6 +4,7 @@ import os.path
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+import numpy as np
 import phate
 import torch
 from matplotlib import pyplot as plt
@@ -113,8 +114,8 @@ def pairwise_comparison(original, reconstructed, sample_names=None, output_file=
     plt.rcParams.update({'font.size': 24})
 
     for i in range(N):
-        axes[i].plot(original[i], label="original gene expression data", linewidth=line_size)
-        axes[i].plot(reconstructed[i], label="reconstructed gene expression data", linewidth=line_size)
+        axes[i].plot(original[i], label="ground truth", linewidth=line_size)
+        axes[i].plot(reconstructed[i], label="prediction", linewidth=line_size)
         axes[i].legend(loc='upper right')
         axes[i].set_title(sample_names[i])
 
@@ -168,13 +169,14 @@ def tab_forty():
     return tab20_duplicated
 
 
-def plot_results(metrics, model, val_set, plot_dir):
+def plot_results(metrics, model, train_set, val_set, plot_dir):
     """
-
-    :param metrics:
-    :param model:
-    :param val_set:
-    :param plot_dir:
+    plots the results and performance of the model
+    :param metrics: a set containing all relevant metrics
+    :param model: the trained model
+    :param train_set: the training set
+    :param val_set: the validation set
+    :param plot_dir: path to save the plot
     :return:
     """
     current_epoch = len(metrics["train_loss"])
@@ -183,21 +185,26 @@ def plot_results(metrics, model, val_set, plot_dir):
         os.makedirs(plot_dir)
     epochs = range(1, current_epoch + 1)
 
-    device_used = get_model_device(model)
+    plt.rcParams.update({'font.size': 16})
+
+    large_loss_variance = (difference_greater_than(metrics["train_loss"], 8) or
+                           difference_greater_than( metrics["val_loss"], 8))
 
     # Plot overall loss curves
-    plt.figure()
+    plt.figure(figsize=(16, 10))
     plt.plot(epochs, metrics["train_loss"], label="Train Loss")
     plt.plot(epochs, metrics["val_loss"], label="Validation Loss")
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
+    if large_loss_variance:
+        plt.yscale("log")
     plt.title("Train and Validation Loss")
     plt.legend()
     plt.savefig(plot_dir + "/loss_curves.png")
     plt.close()
 
     # Plot R2 score curves
-    plt.figure()
+    plt.figure(figsize=(16, 10))
     plt.plot(epochs, metrics["train_R2"], label="Train R2")
     plt.plot(epochs, metrics["val_R2"], label="Validation R2")
     plt.xlabel("Epochs")
@@ -207,32 +214,25 @@ def plot_results(metrics, model, val_set, plot_dir):
     plt.savefig(plot_dir + "/r2_curves.png")
     plt.close()
 
-    # Plot all three train losses
-    plt.figure()
-    plt.plot(epochs, metrics["train_recon"], label="Train Reconstruction Loss")
-    plt.plot(epochs, metrics["train_reg"], label="Train Purity Loss")
-    plt.plot(epochs, metrics["train_kl"], label="Train KLD Loss")
+    # Plot all train and validation losses
+    plt.figure(figsize=(16, 10))
+    plt.plot(epochs, metrics["train_recon"], label="Train Reconstruction Loss", linestyle="--", color="royalblue")
+    plt.plot(epochs, metrics["train_reg"], label="Train Purity Loss", linestyle="--", color="orange")
+    plt.plot(epochs, metrics["train_kl"], label="Train KLD Loss", linestyle="--", color="saddlebrown")
+    plt.plot(epochs, metrics["val_recon"], label="Validation Reconstruction Loss", linestyle=":", color="royalblue")
+    plt.plot(epochs, metrics["val_reg"], label="Validation Purity Loss", linestyle=":", color="orange")
+    plt.plot(epochs, metrics["val_kl"], label="Validation KLD Loss", linestyle=":", color="brown")
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
+    if large_loss_variance:
+        plt.yscale("log")
     plt.title("Multitask Train Losses")
     plt.legend()
-    plt.savefig(plot_dir + "/train_losses.png")
-    plt.close()
-
-    # Plot all three validation losses
-    plt.figure()
-    plt.plot(epochs, metrics["val_recon"], label="Validation Reconstruction Loss")
-    plt.plot(epochs, metrics["val_reg"], label="Validation Purity Loss")
-    plt.plot(epochs, metrics["val_kl"], label="Validation KLD Loss")
-    plt.xlabel("Epochs")
-    plt.ylabel("Loss")
-    plt.title("Multitask Validation Losses")
-    plt.legend()
-    plt.savefig(plot_dir + "/val_losses.png")
+    plt.savefig(plot_dir + "/all_losses.png")
     plt.close()
 
     # Plot the two weights
-    plt.figure()
+    plt.figure(figsize=(16, 10))
     plt.plot(epochs, metrics["w1"], label="Reconstruction Weight")
     plt.plot(epochs, metrics["w2"], label="Purity Weight")
     plt.xlabel("Epochs")
@@ -243,24 +243,34 @@ def plot_results(metrics, model, val_set, plot_dir):
     plt.close()
 
     # Plot the reconstructed samples and predicted purities against the original values
-    viz_loader = torch.utils.data.DataLoader(val_set, batch_size=128, shuffle=True)
+    viz_train_loader = torch.utils.data.DataLoader(train_set, batch_size=128, shuffle=True)
+    viz_val_loader = torch.utils.data.DataLoader(val_set, batch_size=128, shuffle=True)
+    visualize_model_outputs(model, plot_dir, viz_train_loader, dataset="train")
+    visualize_model_outputs(model, plot_dir, viz_val_loader, dataset="validation")
+
+
+def visualize_model_outputs(model, plot_dir, data_loader, dataset=""):
+    device_used = get_model_device(model)
     model.cpu().eval()
-
     with torch.no_grad():
-        x, w, _ = next(iter(viz_loader))
+        x, w, _ = next(iter(data_loader))
         x_hat, w_hat, _, _ = model(x)
-
+    if dataset != "":
+        dataset = dataset + "_"
     # plot reconstruction against original samples
-    pairwise_comparison(x, x_hat, output_file=plot_dir + "/samples_gene_expression.png")
-
+    pairwise_comparison(x, x_hat, output_file=plot_dir + f"/{dataset}samples_gene_expression.png")
     # plot predicted against original purity
     w = w.view(1, -1)
     w_hat = w_hat.view(1, -1)
-    pairwise_comparison(w, w_hat, output_file=plot_dir + "/samples_purity.png")
-
+    pairwise_comparison(w, w_hat, output_file=plot_dir + f"/{dataset}samples_purity.png")
     model.to(device_used)
-
 
 
 def get_model_device(model):
     return next(model.parameters()).device
+
+def difference_greater_than(x, max_difference):
+    max = np.array(x).max()
+    min = np.array(x).min()
+    difference = max - min
+    return difference > max_difference

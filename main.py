@@ -41,7 +41,7 @@ def main():
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=64, shuffle=True)
     val_loader = torch.utils.data.DataLoader(val_set, batch_size=64, shuffle=True)
 
-    metrics, model = epochs_loop(train_loader, val_loader, val_set, comment)
+    metrics, model = epochs_loop(train_loader, val_loader, train_set, val_set, comment)
 
 def load_data(ccle_path, tcga_path):
     """

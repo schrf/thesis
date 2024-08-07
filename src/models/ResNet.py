@@ -72,7 +72,7 @@ class RegressionHead(nn.Module):
     def forward(self, z):
         z = F.relu(self.fc1(z))
         z = F.relu(self.fc2(z))
-        z = F.relu(self.fc3(z))
+        z = self.fc3(z)
         return z
 
 # Variational Sampling

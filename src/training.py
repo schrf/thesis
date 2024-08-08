@@ -1,5 +1,6 @@
 import datetime
 import os
+import pathlib
 
 import torch
 from torch import optim
@@ -9,6 +10,7 @@ from tqdm import tqdm
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import ExponentialLR
 from src.data_visualization import plot_results
+from torchinfo import summary
 
 from src.models.ResNet import MultiTaskVAE
 
@@ -29,7 +31,7 @@ Weightloss2 = torch.tensor([1.0], requires_grad=True, device=device)
 params = [Weightloss1, Weightloss2]
 scaling_optimizer = optim.Adam(params, lr=lr_scaling)
 Gradloss = L1Loss()
-alpha = 0.12
+alpha = 0.8
 l0_recon = None
 l0_purity = None
 
@@ -67,7 +69,7 @@ def r2_score(y, y_pred):
     return r2
 
 
-def epochs_loop(train_loader, val_loader, train_set, val_set, plot_comment):
+def epochs_loop(train_loader, val_loader, train_set, val_set, comment):
     metrics = {
         "train_loss": [],
         "train_R2": [],
@@ -87,14 +89,21 @@ def epochs_loop(train_loader, val_loader, train_set, val_set, plot_comment):
 
     current_time = datetime.datetime.now()
     formatted_time = current_time.strftime("%m-%d_%H-%M")
-    if plot_comment != "":
-        plot_comment = " " + plot_comment
-    plot_dir = "plots/multitask/" + formatted_time + plot_comment
+    if comment != "":
+        comment = " " + comment
+    plot_dir = "plots/multitask/" + formatted_time + comment
+    model_dir = "trained_models/" + formatted_time + comment
+    r2_model_file = None
+    loss_model_file = None
 
     if not os.path.exists(plot_dir):
-        os.mkdir(plot_dir)
+        os.makedirs(plot_dir)
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
 
     save_metadata(plot_dir)
+
+    save_model_architecture(model_dir, comment)
 
     for epoch in range(num_epochs):
         train_loss, train_recon, train_reg, train_kl, train_R2, w1, w2 = batch_train_loop(train_loader, epoch)
@@ -118,6 +127,23 @@ def epochs_loop(train_loader, val_loader, train_set, val_set, plot_comment):
               f"Val Loss: {val_loss:.4f} - Val R2: {val_R2:.4f}")
 
         plot_results(metrics, model, train_set, val_set, plot_dir)
+
+        # save a model if it has the best R2 score or the lowest loss
+        if is_highest_score(metrics["val_R2"]):
+            if r2_model_file is not None:
+                old_file = pathlib.Path(r2_model_file)
+                old_file.unlink()
+            print(f"model dir: {model_dir}")
+            print(f"/best_r2_model_{metrics['val_R2'][-1]}.pt")
+            r2_model_file = model_dir + f"/best_r2_model_{metrics['val_R2'][-1]}.pt"
+            print(r2_model_file)
+            torch.save(model, r2_model_file)
+        if is_lowest_score(["val_loss"]):
+            if loss_model_file is not None:
+                old_file = pathlib.Path(loss_model_file)
+                old_file.unlink()
+            loss_model_file = model_dir + f"/best_loss_model_{metrics['val_loss'][-1]}.pt"
+            torch.save(model, loss_model_file)
 
     return metrics, model
 
@@ -204,14 +230,12 @@ def batch_train_loop(train_loader, epoch):
         total_kl_loss += kl_loss.item() / count
         total_reg_loss += purity_loss.item() / count
         total_recon_loss += recon_loss.item() / count
-        total_r2 += r2_score(x.detach().cpu(), x_hat.detach().cpu()) / count
+        total_r2 += float(r2_score(x.detach().cpu(), x_hat.detach().cpu())) / count
         total_w1 += float(params[0].detach().cpu()) / count
         total_w2 += float(params[1].detach().cpu()) / count
 
 
     return total_loss, total_recon_loss, total_reg_loss, total_kl_loss, total_r2, total_w1, total_w2
-
-# TODO: check why batch losses seem to be twice as large as train losses
 
 def batch_val_loop(val_loader):
     model.eval()
@@ -239,7 +263,7 @@ def batch_val_loop(val_loader):
             total_kl_loss += kl_loss.item() / count
             total_reg_loss += purity_loss.item() / count
             total_recon_loss += recon_loss.item() / count
-            total_r2 += r2_score(x.detach().cpu(), x_hat.detach().cpu()) / count
+            total_r2 += float(r2_score(x.detach().cpu(), x_hat.detach().cpu())) / count
 
     return (total_loss, total_recon_loss, total_reg_loss,
             total_kl_loss, total_r2)
@@ -255,3 +279,17 @@ def save_metadata(plot_dir):
                 alpha = {alpha}
                 """
         f.write(data)
+
+def save_model_architecture(model_dir, comment):
+    if not os.path.isfile(model_dir + "/summary.txt"):
+        with open(model_dir + "/summary.txt", "w") as f:
+            summary_str = str(summary(model, (1, 3350), verbose=0))
+            f.write(summary_str)
+
+def is_highest_score(list):
+    """returns True if the last element in the list has the highest value, else False"""
+    return list[-1] == max(list)
+
+def is_lowest_score(list):
+    """returns True if the last element in the list has the lowest value, else False"""
+    return list[-1] == min(list)

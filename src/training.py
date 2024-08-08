@@ -133,10 +133,7 @@ def epochs_loop(train_loader, val_loader, train_set, val_set, comment):
             if r2_model_file is not None:
                 old_file = pathlib.Path(r2_model_file)
                 old_file.unlink()
-            print(f"model dir: {model_dir}")
-            print(f"/best_r2_model_{metrics['val_R2'][-1]}.pt")
             r2_model_file = model_dir + f"/best_r2_model_{metrics['val_R2'][-1]}.pt"
-            print(r2_model_file)
             torch.save(model, r2_model_file)
         if is_lowest_score(["val_loss"]):
             if loss_model_file is not None:

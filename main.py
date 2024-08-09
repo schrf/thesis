@@ -1,12 +1,9 @@
-import pickle
-
 import sys
 import torch
 from sklearn.model_selection import train_test_split
 
-from src.data_visualization import plot_results
+from src.data_loader import load_data
 from src.training import epochs_loop
-from src.data_transformation import combine_ccle_tcga
 from src.datasets.simple_dataset import SimpleDataset
 
 
@@ -42,31 +39,6 @@ def main():
     val_loader = torch.utils.data.DataLoader(val_set, batch_size=64, shuffle=True)
 
     metrics, model = epochs_loop(train_loader, val_loader, train_set, val_set, comment)
-
-def load_data(ccle_path, tcga_path):
-    """
-    returns the combined ccle and tcga datasets
-    :param ccle_path: path to ccle pickle file
-    :param tcga_path: path to tcga pickle file
-    :return: gene expression and metadata dataframe
-    """
-
-    # Open the pickle file in binary read mode
-    with open(ccle_path, 'rb') as file:
-        # Load the contents of the pickle file
-        ccle = pickle.load(file)
-
-    with open(tcga_path, 'rb') as file:
-        tcga = pickle.load(file)
-
-    ccle_genes = ccle["rnaseq"]
-    ccle_meta = ccle["meta"]
-    tcga_genes = tcga["rnaseq"]
-    tcga_meta = tcga["meta"]
-    del ccle, tcga
-
-    combined_genes, combined_meta = combine_ccle_tcga(ccle_genes, ccle_meta, tcga_genes, tcga_meta)
-    return combined_genes, combined_meta
 
 
 if __name__ == "__main__":

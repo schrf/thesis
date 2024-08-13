@@ -1,64 +1,50 @@
-import sys
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision import models
 
 # Encoder based on ResNet-18
-class ResidualBlock1D(nn.Module):
-    def __init__(self, in_channels, out_channels, stride=1):
-        super(ResidualBlock1D, self).__init__()
-        self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm1d(out_channels)
-        self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm1d(out_channels)
-
-        self.shortcut = nn.Sequential()
-        if stride != 1 or in_channels != out_channels:
-            self.shortcut = nn.Sequential(
-                nn.Conv1d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm1d(out_channels)
-            )
-
-    def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
-        out += self.shortcut(x)
-        out = F.relu(out)
-        return out
-
 class Encoder(nn.Module):
+    """Original ResNet architecture changed such that it can handle 1d input"""
     def __init__(self, latent_dim, input_length):
         super(Encoder, self).__init__()
+        # Load ResNet-18 and modify it for 1D inputs
+        self.resnet = models.resnet18(pretrained=False)
 
-        self.resblock1 = ResidualBlock1D(in_channels=1, out_channels=4)
-        self.resblock2 = ResidualBlock1D(in_channels=4, out_channels=6)
-        self.resblock3 = ResidualBlock1D(in_channels=6, out_channels=10)
-        self.resblock4 = ResidualBlock1D(in_channels=10, out_channels=15)
-        self.fc = nn.Linear(15 * input_length, 2 * latent_dim)
+        # Modify the first convolutional layer to accept 1D input
+        self.resnet.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+
+        # Calculate the output dimension after the global average pooling
+        self.resnet.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+
+        self.resnet.fc = nn.Linear(self.resnet.fc.in_features, 2 * latent_dim)
 
     def forward(self, x):
         x = x.unsqueeze(1)  # Add a channel dimension
-        x = self.resblock1(x)
-        x = self.resblock2(x)
-        # x = F.max_pool1d(x, kernel_size=2, stride=2)
-        x = self.resblock3(x)
-        x = self.resblock4(x)
-        # x = F.max_pool1d(x, kernel_size=2, stride=2)
-        x = x.view(x.size(0), -1)
-        mean, logvar = torch.chunk(self.fc(x), 2, dim=1)
+        x = x.unsqueeze(-1)  # Add a spatial dimension to make it 2D
+        x = self.resnet(x)
+        mean, logvar = torch.chunk(x, 2, dim=1)
         return mean, logvar
 
 # Decoder
 class Decoder(nn.Module):
     def __init__(self, latent_dim, output_dim):
         super(Decoder, self).__init__()
-
         self.output_dim = output_dim
-        self.fc = nn.Linear(latent_dim, output_dim)
+
+        self.fc = nn.Sequential(
+            nn.Linear(latent_dim, 512),
+            nn.ReLU(),
+            nn.Linear(512, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, 2048),
+            nn.ReLU(),
+            nn.Linear(2048, output_dim)
+        )
 
     def forward(self, z):
         z = self.fc(z)
+        z = z.view(z.size(0), -1)
         return z
 
 # Regression Head:

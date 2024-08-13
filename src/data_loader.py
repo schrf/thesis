@@ -1,5 +1,9 @@
+import pickle
+
 import pandas as pd
 import os.path
+
+from src.data_transformation import combine_ccle_tcga
 
 
 def ccle_full_loader() -> pd.DataFrame:
@@ -79,3 +83,29 @@ def tcga_metadata_loader() -> pd.DataFrame:
     tcga_metadata.index = [index[:-1] for index in
                            tcga_metadata.index]  # remove the trailing letters, as they are not present in tcga indices
     return tcga_metadata
+
+
+def load_data(ccle_path, tcga_path):
+    """
+    returns the combined ccle and tcga datasets
+    :param ccle_path: path to ccle pickle file
+    :param tcga_path: path to tcga pickle file
+    :return: gene expression and metadata dataframe
+    """
+
+    # Open the pickle file in binary read mode
+    with open(ccle_path, 'rb') as file:
+        # Load the contents of the pickle file
+        ccle = pickle.load(file)
+
+    with open(tcga_path, 'rb') as file:
+        tcga = pickle.load(file)
+
+    ccle_genes = ccle["rnaseq"]
+    ccle_meta = ccle["meta"]
+    tcga_genes = tcga["rnaseq"]
+    tcga_meta = tcga["meta"]
+    del ccle, tcga
+
+    combined_genes, combined_meta = combine_ccle_tcga(ccle_genes, ccle_meta, tcga_genes, tcga_meta)
+    return combined_genes, combined_meta

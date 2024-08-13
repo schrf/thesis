@@ -16,17 +16,18 @@ from src.models.ResNet import MultiTaskVAE
 
 # initializations for the model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-num_epochs = 50
+num_epochs = 2000
 input_dim = 3350
 latent_dim = 64
 lr = 0.0001
 lr_scaling = lr
 model = MultiTaskVAE(input_dim, latent_dim).to(device)
 optimizer = optim.Adam(model.parameters(), lr=lr)
+scheduler = ExponentialLR(optimizer, gamma=0.98)
 
 # weights
 kl_loss_weight = 0.00001
-recon_loss_weight = 0.8
+recon_loss_weight = 0.85
 purity_loss_weight = 1 - recon_loss_weight
 alpha = None
 
@@ -102,6 +103,9 @@ def epochs_loop(train_loader, val_loader, train_set, val_set, comment):
     for epoch in range(num_epochs):
         train_loss, train_recon, train_reg, train_kl, train_R2, w1, w2 = batch_train_loop(train_loader, epoch)
         val_loss, val_recon, val_reg, val_kl, val_R2 = batch_val_loop(val_loader)
+
+        if epoch % 20 == 0 & epoch != 0:
+            scheduler.step()
 
         metrics["train_loss"].append(train_loss)
         metrics["train_recon"].append(train_recon)

@@ -5,6 +5,7 @@ from torchvision import models
 
 # Encoder based on ResNet-18
 class Encoder(nn.Module):
+    """Original ResNet architecture changed such that it can handle 1d input"""
     def __init__(self, latent_dim, input_length):
         super(Encoder, self).__init__()
         # Load ResNet-18 and modify it for 1D inputs
@@ -12,12 +13,10 @@ class Encoder(nn.Module):
 
         # Modify the first convolutional layer to accept 1D input
         self.resnet.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        # self.resnet.maxpool = nn.Identity()  # Remove maxpool, as it might reduce the input too early
 
         # Calculate the output dimension after the global average pooling
         self.resnet.avgpool = nn.AdaptiveAvgPool2d((1, 1))
 
-        # Modify the final fully connected layer to output the desired latent dimension
         self.resnet.fc = nn.Linear(self.resnet.fc.in_features, 2 * latent_dim)
 
     def forward(self, x):

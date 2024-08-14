@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 def scatter_plot_classes(Y, metadata, title=None, output_dir=None):
     """
     creates a scatter plot visualization where each sample is colored by class
-    :param data: the gene expression data as pandas dataframe or 2d numpy array
+    :param Y: the 2D transformed data as numpy array
     :param metadata: a pandas Series or 1d numpy array containing metadata with classes
     :param title: optional title, if None the Series title is used
     :param output_dir: path to save the plot. If None plot.show() will be called
@@ -274,3 +274,16 @@ def difference_greater_than(x, max_difference):
     min = np.array(x).min()
     difference = max - min
     return difference > max_difference
+
+def tumor_percentage_histogram(data, dataset_name, bins=20):
+    """
+    plots a histogram of the tumor percentage of samples
+    :param data: a Series containing the tumor percentage
+    :param dataset_name: the name, e.g. "TCGA" or "BRCA"
+    :return: None
+    """
+    plt.hist(data, bins=bins)
+    plt.xlabel("Tumor Percentage")
+    plt.ylabel("Number of samples")
+    plt.title(f"{dataset_name} Tumor Percentage")
+    plt.show()

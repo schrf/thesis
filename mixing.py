@@ -6,43 +6,73 @@ import pandas as pd
 from src.data_loader import load_data
 
 
-def generate_mixed_data(A, B, genes, meta, generated_samples):
+def generate_mixed_data(A, B, genes, meta, number_samples):
+    """
+    generates artificial gene expression samples and their corresponding metadata by mixing with backbone
+    :param A: parameter a of the Beta distribution
+    :param B: parameter b of the Beta distribution
+    :param genes: gene expression dataframe
+    :param meta: metadata dataframe
+    :param number_samples: the number of samples to generate
+    :return: two dataframes for gene expression values and metadata
+    """
+    # split data into high purity and low purity
     low_purity = meta["cancer_purity"] < 0.6
     high_purity = meta["cancer_purity"] >= 0.6
+
     high_purity_genes = genes[high_purity]
     low_purity_genes = genes[low_purity]
     high_purity_meta = meta[high_purity]
     low_purity_meta = meta[low_purity]
+
     meta_columns = meta.columns
+
+    # combine the gene expression data with its corresponding metadata and randomly sample the gene expression data
     high_purity_combined = high_purity_genes.join(high_purity_meta, how='inner')
     low_purity_combined = low_purity_genes.join(low_purity_meta, how='inner')
+
     if len(low_purity_combined) != len(low_purity_meta) or len(high_purity_combined) != len(high_purity_meta):
         sys.exit("Samples in gene expression and meta do not match")
-    sampled_high_purity = high_purity_combined.sample(n=generated_samples, random_state=0,
+
+    sampled_high_purity = high_purity_combined.sample(n=number_samples, random_state=0,
                                                       replace=True)
-    sampled_low_purity = low_purity_combined.sample(n=generated_samples, random_state=0,
+    sampled_low_purity = low_purity_combined.sample(n=number_samples, random_state=0,
                                                     replace=True)
+
     sampled_high_purity_meta = sampled_high_purity[meta_columns]
     sampled_high_purity_genes = sampled_high_purity.drop(meta_columns, axis=1)
     sampled_low_purity_meta = sampled_low_purity[meta_columns]
     sampled_low_purity_genes = sampled_low_purity.drop(meta_columns, axis=1)
-    beta_vector = np.random.beta(A, B, size=generated_samples)
+
+    # generate the weight vector using a beta distribution and flipping values below 0.5 to ensure the backbone to
+    # always be the majority class
+    beta_vector = np.random.beta(A, B, size=number_samples)
     to_flip = beta_vector < 0.5
     beta_vector[to_flip] = 1 - beta_vector[to_flip]
     low_purity_scaling = beta_vector
     high_purity_scaling = 1 - beta_vector
+
+    # multiply samples by their random weights
     sampled_high_purity_genes = sampled_high_purity_genes.mul(high_purity_scaling, axis=0)
     sampled_low_purity_genes = sampled_low_purity_genes.mul(low_purity_scaling, axis=0)
+
     sampled_high_purity_genes.reset_index(drop=True, inplace=True)
     sampled_low_purity_genes.reset_index(drop=True, inplace=True)
+
+    # add the minority (sampled_high_purity_genes) to the backbone (sampled_low_purity_genes)
     mixed_genes = sampled_high_purity_genes + sampled_low_purity_genes
+
+    # combine the purity metadata
     high_purity_scaled = sampled_high_purity_meta["cancer_purity"].mul(high_purity_scaling).reset_index(drop=True)
     low_purity_scaled = sampled_low_purity_meta["cancer_purity"].mul(low_purity_scaling).reset_index(drop=True)
     mixed_purity = high_purity_scaled.add(low_purity_scaled)
+
+    # define additional metadata information
     disease_backbone = sampled_low_purity_meta["diagnosis"].reset_index(drop=True)
     disease_auxiliary = sampled_high_purity_meta["diagnosis"].reset_index(drop=True)
     dataset_backbone = sampled_low_purity_meta["dataset"].reset_index(drop=True)
     dataset_auxiliary = sampled_high_purity_meta["dataset"].reset_index(drop=True)
+
     mixed_meta = pd.DataFrame({
         "cancer_purity": mixed_purity,
         "names_backbone": sampled_low_purity_meta.index,
@@ -55,10 +85,13 @@ def generate_mixed_data(A, B, genes, meta, generated_samples):
         "dataset_auxiliary": dataset_auxiliary,
         "is_mixed": pd.Series(True, index=dataset_auxiliary.index)
     })
+
     return mixed_genes, mixed_meta
 
 
 def modified_meta(meta):
+    """takes a metadata dataframe
+    returns a new one with backbone columns containing the original information and auxiliary columns containing None"""
     mod_meta = pd.DataFrame({
         "cancer_purity": meta["cancer_purity"],
         "names_backbone": meta.index,

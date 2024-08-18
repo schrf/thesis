@@ -109,29 +109,45 @@ def modified_meta(meta):
 
 def main():
     if len(sys.argv) != 8:
-        sys.exit("Usage: python3 data_transformation.py <path/to/ccle.pickle> <path/to/tcga.pickle> <path/to/output/> "
-                 "<proportion mixed data> <A> <B> <Include non-mixed data | True or False>")
+        sys.exit("Usage: python3 mixing.py <path/to/ccle.pickle> <path/to/tcga.pickle> <path/to/output/> "
+                 "<number mixed samples per cancer type> <A> <B> <Include non-mixed data | True or False>")
     ccle_pickle_path = sys.argv[1]
     tcga_pickle_path = sys.argv[2]
     output_dir = sys.argv[3]
-    proportion_mixed = int(sys.argv[4])
+    number_generated = int(sys.argv[4])
     A = float(sys.argv[5])
     B = float(sys.argv[6])
     include_original_data = sys.argv[7].lower() == 'true'
 
-
     genes, meta = load_data(ccle_pickle_path, tcga_pickle_path)
-    num_samples = len(genes)
-    generated_samples = int(num_samples * proportion_mixed)
-    mixed_genes, mixed_meta = generate_mixed_data(A, B, genes, meta, generated_samples)
+
+    mixed_genes_list = []
+    mixed_meta_list = []
+
+    # mix for every cancer type number_generated samples
+    for cancer_type in meta["diagnosis"].unique():
+        number_low_purity_samples = ((meta["cancer_purity"] < 0.6) & (meta["diagnosis"] == cancer_type)).sum()
+        if number_low_purity_samples > 0:
+
+            # ensure that the backbone can only be from samples with cancer_type
+            cancer_filter = (meta["diagnosis"] == cancer_type) | (meta["cancer_purity"] >= 0.6)
+            genes_filtered = genes[cancer_filter]
+            meta_filtered = meta[cancer_filter]
+
+            # generate the speciefied amount of samples for every cancer_type
+            mixed_genes, mixed_meta = generate_mixed_data(A, B, genes_filtered, meta_filtered, number_generated)
+            mixed_genes_list.append(mixed_genes)
+            mixed_meta_list.append(mixed_meta)
+
+    mixed_genes = pd.concat(mixed_genes_list, ignore_index=True)
+    mixed_meta = pd.concat(mixed_meta_list, ignore_index=True)
+
     if include_original_data:
         mod_meta = modified_meta(meta)
         mixed_genes = pd.concat([mixed_genes, genes], ignore_index=True)
         mixed_meta = pd.concat([mixed_meta, mod_meta], ignore_index=True)
 
-
-
-    with open(output_dir + f"mixed_genes_proportion={proportion_mixed}_a={A}_b={B}"
+    with open(output_dir + f"mixed_genes_num_samples={number_generated}_a={A}_b={B}"
                            f"_contains_original={include_original_data}.pickle", "wb") as handle:
         pickle.dump(
             {
@@ -139,7 +155,6 @@ def main():
                 "meta": mixed_meta
             },
             handle)
-
 
 
 if __name__ == "__main__":

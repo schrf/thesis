@@ -282,7 +282,8 @@ def tumor_percentage_histogram(data, dataset_name, bins=20):
     :param dataset_name: the name, e.g. "TCGA" or "BRCA"
     :return: None
     """
-    plt.hist(data, bins=bins)
+    plt.xlim(0., 1.)
+    plt.hist(data, bins=bins, range=(0., 1.))
     plt.xlabel("Tumor Percentage")
     plt.ylabel("Number of samples")
     plt.title(f"{dataset_name} Tumor Percentage")

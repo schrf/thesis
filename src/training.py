@@ -1,6 +1,7 @@
 import datetime
 import os
 import pathlib
+import pickle
 
 import torch
 from torch import optim
@@ -16,7 +17,7 @@ from src.models.ResNet import MultiTaskVAE
 
 # initializations for the model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-num_epochs = 2000
+num_epochs = 400
 input_dim = 3350
 latent_dim = 64
 lr = 0.0001
@@ -126,6 +127,10 @@ def epochs_loop(train_loader, val_loader, train_set, val_set, comment):
 
         plot_results(metrics, model, train_set, val_set, plot_dir)
 
+        with open(model_dir + "/metrics.pickle", "wb") as handle:
+            pickle.dump(metrics, handle)
+
+
         # save a model if it has the best R2 score or the lowest loss
         if is_highest_score(metrics["val_R2"]):
             if r2_model_file is not None:
@@ -133,7 +138,7 @@ def epochs_loop(train_loader, val_loader, train_set, val_set, comment):
                 old_file.unlink()
             r2_model_file = model_dir + f"/best_r2_model_{metrics['val_R2'][-1]}.pt"
             torch.save(model, r2_model_file)
-        if is_lowest_score(["val_loss"]):
+        if is_lowest_score(metrics["val_loss"]):
             if loss_model_file is not None:
                 old_file = pathlib.Path(loss_model_file)
                 old_file.unlink()

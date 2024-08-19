@@ -2,29 +2,36 @@ import sys
 import torch
 from sklearn.model_selection import train_test_split
 
-from src.data_loader import load_data
+from src.data_loader import load_data, load_mixed_data
 from src.training import epochs_loop
 from src.datasets.simple_dataset import SimpleDataset
 
 
 def main():
     if len(sys.argv) < 3 or len(sys.argv) > 4:
-        print("Usage: python main.py <ccle_path> <tcga_path> [optional comment for run]")
+        print("Usage: python main.py <ccle_path> <tcga_path> <comment for run> OR python main.py <mixed_path> <comment for run>")
         sys.exit(1)
 
-    ccle_path = sys.argv[1]
-    tcga_path = sys.argv[2]
-    if len(sys.argv) == 4:
+    is_mixed = len(sys.argv) == 3
+    if not is_mixed:
+        ccle_path = sys.argv[1]
+        tcga_path = sys.argv[2]
         comment = sys.argv[3]
-    else:
-        comment = ""
 
-    try:
-        genes, meta = load_data(ccle_path, tcga_path)
-        print("Data loaded successfully.")
-    except Exception as e:
-        print(f"An error occurred during loading ccle and tcga: {e}")
-        sys.exit(1)
+        try:
+            genes, meta = load_data(ccle_path, tcga_path)
+            print("Data loaded successfully.")
+        except Exception as e:
+            print(f"An error occurred during loading ccle and tcga: {e}")
+            sys.exit(1)
+    else:
+        mixed_path = sys.argv[1]
+        comment = sys.argv[2]
+        try:
+            genes, meta = load_mixed_data(mixed_path)
+            print("Data loaded successfully.")
+        except Exception as e:
+            print(f"An error occurred during loading mixed data: {e}")
 
     train_genes, val_genes, train_meta, val_meta = train_test_split(genes, meta, test_size=0.2, random_state=42)
 

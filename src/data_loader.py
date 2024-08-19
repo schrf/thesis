@@ -109,3 +109,11 @@ def load_data(ccle_path, tcga_path):
 
     combined_genes, combined_meta = combine_ccle_tcga(ccle_genes, ccle_meta, tcga_genes, tcga_meta)
     return combined_genes, combined_meta
+
+def load_mixed_data(path):
+    """loads the file at path and returns the gene expression and metadata dataframe"""
+    with open(path, 'rb') as file:
+        data = pickle.load(file)
+        genes = data["rnaseq"]
+        meta = data["meta"]
+        return genes, meta

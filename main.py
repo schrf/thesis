@@ -24,16 +24,15 @@ def main():
         except Exception as e:
             print(f"An error occurred during loading ccle and tcga: {e}")
             sys.exit(1)
+            train_genes, val_genes, train_meta, val_meta = train_test_split(genes, meta, test_size=0.2, random_state=42)
     else:
         mixed_path = sys.argv[1]
         comment = sys.argv[2]
         try:
-            genes, meta = load_mixed_data(mixed_path)
+            train_genes, val_genes, train_meta, val_meta = load_mixed_data(mixed_path)
             print("Data loaded successfully.")
         except Exception as e:
             print(f"An error occurred during loading mixed data: {e}")
-
-    train_genes, val_genes, train_meta, val_meta = train_test_split(genes, meta, test_size=0.2, random_state=42)
 
     transform = {
         "z_score": "per_sample"

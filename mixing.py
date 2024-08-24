@@ -2,6 +2,7 @@ import pickle
 import sys
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import train_test_split
 
 from src.data_loader import load_data
 
@@ -121,18 +122,20 @@ def main():
 
     genes, meta = load_data(ccle_pickle_path, tcga_pickle_path)
 
+    train_genes, val_genes, train_meta, val_meta = train_test_split(genes, meta, test_size=0.2, random_state=42)
+
     mixed_genes_list = []
     mixed_meta_list = []
 
     # mix for every cancer type number_generated samples
-    for cancer_type in meta["diagnosis"].unique():
-        number_low_purity_samples = ((meta["cancer_purity"] < 0.6) & (meta["diagnosis"] == cancer_type)).sum()
+    for cancer_type in train_meta["diagnosis"].unique():
+        number_low_purity_samples = ((train_meta["cancer_purity"] < 0.6) & (train_meta["diagnosis"] == cancer_type)).sum()
         if number_low_purity_samples > 0:
 
             # ensure that the backbone can only be from samples with cancer_type
-            cancer_filter = (meta["diagnosis"] == cancer_type) | (meta["cancer_purity"] >= 0.6)
-            genes_filtered = genes[cancer_filter]
-            meta_filtered = meta[cancer_filter]
+            cancer_filter = (train_meta["diagnosis"] == cancer_type) | (train_meta["cancer_purity"] >= 0.6)
+            genes_filtered = train_genes[cancer_filter]
+            meta_filtered = train_meta[cancer_filter]
 
             # generate the speciefied amount of samples for every cancer_type
             mixed_genes, mixed_meta = generate_mixed_data(A, B, genes_filtered, meta_filtered, number_generated)
@@ -143,8 +146,8 @@ def main():
     mixed_meta = pd.concat(mixed_meta_list, ignore_index=True)
 
     if include_original_data:
-        mod_meta = modified_meta(meta)
-        mixed_genes = pd.concat([mixed_genes, genes], ignore_index=True)
+        mod_meta = modified_meta(train_meta)
+        mixed_genes = pd.concat([mixed_genes, train_genes], ignore_index=True)
         mixed_meta = pd.concat([mixed_meta, mod_meta], ignore_index=True)
 
     with open(output_dir + f"mixed_genes_num_samples={number_generated}_a={A}_b={B}"
@@ -152,7 +155,9 @@ def main():
         pickle.dump(
             {
                 "rnaseq": mixed_genes,
-                "meta": mixed_meta
+                "meta": mixed_meta,
+                "rnaseq_val": val_genes,
+                "meta_val": val_meta
             },
             handle)
 

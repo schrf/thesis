@@ -114,6 +114,8 @@ def load_mixed_data(path):
     """loads the file at path and returns the gene expression and metadata dataframe"""
     with open(path, 'rb') as file:
         data = pickle.load(file)
-        genes = data["rnaseq"]
-        meta = data["meta"]
-        return genes, meta
+        train_genes = data["rnaseq"]
+        train_meta = data["meta"]
+        val_genes = data["rnaseq_val"]
+        val_meta = data["meta_val"]
+        return train_genes, val_genes, train_meta, val_meta

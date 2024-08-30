@@ -4,33 +4,10 @@ import pathlib
 import pickle
 
 import torch
-from torch import optim
-from torch.nn import L1Loss
-from torch.optim.lr_scheduler import ExponentialLR
-from tqdm import tqdm
 import torch.nn.functional as F
-from torch.optim.lr_scheduler import ExponentialLR
+
 from src.data_visualization import plot_results
 from torchinfo import summary
-
-from src.models.ResNet import MultiTaskVAE
-
-# initializations for the model
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-num_epochs = 400
-input_dim = 3350
-latent_dim = 64
-lr = 0.0001
-lr_scaling = lr
-model = MultiTaskVAE(input_dim, latent_dim).to(device)
-optimizer = optim.Adam(model.parameters(), lr=lr)
-scheduler = ExponentialLR(optimizer, gamma=0.98)
-
-# weights
-kl_loss_weight = 0.00001
-recon_loss_weight = 0.85
-purity_loss_weight = 1 - recon_loss_weight
-alpha = None
 
 # loss functions
 def KLD(mu, sigma):
@@ -65,7 +42,8 @@ def r2_score(y, y_pred):
     return r2
 
 
-def epochs_loop(train_loader, val_loader, train_set, val_set, comment):
+def epochs_loop(model, optimizer, scheduler, train_set, val_set, hyperparams, device, comment):
+    """executes all epochs and trains, validates and saves the results"""
     metrics = {
         "train_loss": [],
         "train_R2": [],
@@ -81,7 +59,15 @@ def epochs_loop(train_loader, val_loader, train_set, val_set, comment):
         "w2": []
     }
 
+    tasks_weights, kl_loss_weight, batch_size, num_epochs = (hyperparams["task_weights"],
+                                                                     hyperparams["kl_loss_weight"],
+                                                                     hyperparams["batch_size"],
+                                                                     hyperparams["num_epochs"])
+
     print(f"{device} is used")
+
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
+    val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size, shuffle=True)
 
     current_time = datetime.datetime.now()
     formatted_time = current_time.strftime("%m-%d_%H-%M")
@@ -97,13 +83,14 @@ def epochs_loop(train_loader, val_loader, train_set, val_set, comment):
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
 
-    save_metadata(plot_dir)
+    save_metadata(plot_dir, num_epochs, hyperparams["input_dim"], hyperparams["latent_dim"], hyperparams["lr"],
+                  hyperparams["lr_scaling"], hyperparams["kl_loss_weight"], hyperparams["alpha"])
 
-    save_model_architecture(model_dir, comment)
+    save_model_architecture(model_dir, model)
 
     for epoch in range(num_epochs):
-        train_loss, train_recon, train_reg, train_kl, train_R2, w1, w2 = batch_train_loop(train_loader, epoch)
-        val_loss, val_recon, val_reg, val_kl, val_R2 = batch_val_loop(val_loader)
+        train_loss, train_recon, train_reg, train_kl, train_R2, w1, w2 = train_loop(model, train_loader, tasks_weights, kl_loss_weight, optimizer, device)
+        val_loss, val_recon, val_reg, val_kl, val_R2 = val_loop(model, val_loader, tasks_weights, kl_loss_weight, device)
 
         if epoch % 20 == 0 & epoch != 0:
             scheduler.step()
@@ -145,10 +132,9 @@ def epochs_loop(train_loader, val_loader, train_set, val_set, comment):
             loss_model_file = model_dir + f"/best_loss_model_{metrics['val_loss'][-1]}.pt"
             torch.save(model, loss_model_file)
 
-    return metrics, model
 
-
-def batch_train_loop(train_loader, epoch):
+def train_loop(model, train_loader, tasks_weights, kl_loss_weight, optimizer, device):
+    """performs the training loop over all batches in the train dataloader once and optimizes the model parameters"""
     model.train()
     total_loss = 0
     total_r2 = 0
@@ -158,6 +144,7 @@ def batch_train_loop(train_loader, epoch):
     total_w1 = 0
     total_w2 = 0
     count = len(train_loader)
+    recon_loss_weight, purity_loss_weight = tasks_weights
 
     for iter, batch in enumerate(train_loader):
 
@@ -189,7 +176,8 @@ def batch_train_loop(train_loader, epoch):
 
     return total_loss, total_recon_loss, total_reg_loss, total_kl_loss, total_r2, total_w1, total_w2
 
-def batch_val_loop(val_loader):
+def val_loop(model, val_loader, tasks_weights, kl_loss_weight, device):
+    """performs the validation loop over all batches in the validation dataloader once"""
     model.eval()
     total_loss = 0
     total_r2 = 0
@@ -197,6 +185,7 @@ def batch_val_loop(val_loader):
     total_reg_loss = 0
     total_recon_loss = 0
     count = len(val_loader)
+    recon_loss_weight, purity_loss_weight = tasks_weights
 
     with torch.no_grad():
         for batch in val_loader:
@@ -218,7 +207,7 @@ def batch_val_loop(val_loader):
     return (total_loss, total_recon_loss, total_reg_loss,
             total_kl_loss, total_r2)
 
-def save_metadata(plot_dir):
+def save_metadata(plot_dir, num_epochs, input_dim, latent_dim, lr, lr_scaling, kl_loss_weight, alpha):
     with open(plot_dir + '/metadata.txt', 'w') as f:
         data = f"""num_epochs = {num_epochs}
                 input_dim = {input_dim}
@@ -230,7 +219,7 @@ def save_metadata(plot_dir):
                 """
         f.write(data)
 
-def save_model_architecture(model_dir, comment):
+def save_model_architecture(model_dir, model):
     if not os.path.isfile(model_dir + "/summary.txt"):
         with open(model_dir + "/summary.txt", "w") as f:
             summary_str = str(summary(model, (1, 3350), verbose=0))

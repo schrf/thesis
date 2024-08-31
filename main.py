@@ -2,7 +2,7 @@ import sys
 import torch
 from sklearn.model_selection import train_test_split
 
-from src.data_loader import load_data, load_mixed_data
+from src.loader import load_data, load_mixed_data
 from src.training import epochs_loop
 from src.datasets.simple_dataset import SimpleDataset
 from torch.optim.lr_scheduler import ExponentialLR

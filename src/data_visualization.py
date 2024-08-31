@@ -1,13 +1,10 @@
-import datetime
+import math
 import os
 import os.path
 
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import numpy as np
-import phate
 import torch
-from matplotlib import pyplot as plt
 
 
 def scatter_plot_classes(Y, metadata, title=None, output_dir=None):
@@ -288,3 +285,28 @@ def tumor_percentage_histogram(data, dataset_name, bins=20):
     plt.ylabel("Number of samples")
     plt.title(f"{dataset_name} Tumor Percentage")
     plt.show()
+
+def metrics_overview_plot(df, label=None, xlabel=None):
+    """
+    creates a overview plot of metrics & losses
+    :param df: a DataFrame. Every column contains one metric and the indices must be numbers
+    :param label: if not None, it will be used as the label for the plots legend
+    :return: None
+    """
+    num_metrics = len(df.columns)
+    axis_length = math.ceil(math.sqrt(num_metrics))
+    indices = df.index
+
+    for i in range(num_metrics):
+        plt.subplot(axis_length, axis_length, i + 1)
+        column_name = df.columns[i]
+        plt.title(column_name)
+        plt.plot(indices, df[column_name], label=label)
+
+        if label is not None:
+            plt.legend()
+
+        if xlabel is not None:
+            plt.xlabel(xlabel)
+
+    plt.tight_layout()

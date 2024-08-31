@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-from src.data_loader import load_data
+from src.loader import load_data
 
 
 def generate_mixed_data(A, B, genes, meta, number_samples):

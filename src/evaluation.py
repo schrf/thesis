@@ -25,53 +25,54 @@ def create_dataloader(dataset, max_batch_size):
     return dataloader
 
 
-def high_low_metrics(model, genes, meta):
+def splitted_metrics(model, filter, genes, meta):
     """
-    calculates the metrics and losses for given gene expression values, metadata and a model
+    calculates the metrics and losses for each the filtered data and the rest
     :param model: the trained model for evaluation
+    :param filter: the filter to apply
     :param genes: a DataFrame containing gene expression values
     :param meta: a DataFrame containing the coresponding metadata
-    :return: low_metrics and high_metrics, each containing total_loss,
+    :return: filter_metrics and other_metrics, each containing total_loss,
     total_recon_loss, total_reg_loss,  total_kl_loss, total_r2
     """
-    low_filter = meta["cancer_purity"] < 0.6
-    high_filter = meta["cancer_purity"] >= 0.6
+    inverse_filter = ~filter
 
-    low_genes = genes[low_filter]
-    high_genes = genes[high_filter]
+    filter_genes = genes[filter]
+    other_genes = genes[inverse_filter]
 
-    low_meta = meta[low_filter]
-    high_meta = meta[high_filter]
+    filter_meta = meta[filter]
+    other_meta = meta[inverse_filter]
 
     transform = {
         "z_score": "per_sample"
     }
 
-    low_dataset = SimpleDataset(low_genes, low_meta, transform=transform)
-    high_dataset = SimpleDataset(high_genes, high_meta, transform=transform)
+    filter_dataset = SimpleDataset(filter_genes, filter_meta, transform=transform)
+    other_dataset = SimpleDataset(other_genes, other_meta, transform=transform)
     max_batch_size = 1024
-    low_dataloader = create_dataloader(low_dataset, max_batch_size)
-    high_dataloader = create_dataloader(high_dataset, max_batch_size)
-    low_metrics = val_loop(model, low_dataloader, [0.85, 0.15], 0.00001, "cuda")
-    high_metrics = val_loop(model, high_dataloader, [0.85, 0.15], 0.00001, "cuda")
-    return low_metrics, high_metrics
+    filter_dataloader = create_dataloader(filter_dataset, max_batch_size)
+    other_dataloader = create_dataloader(other_dataset, max_batch_size)
+    filter_metrics = val_loop(model, filter_dataloader, [0.85, 0.15], 0.00001, "cuda")
+    other_metrics = val_loop(model, other_dataloader, [0.85, 0.15], 0.00001, "cuda")
+    return filter_metrics, other_metrics
 
 
-def high_low_purity_dataframes(model_paths, number_mixed_list, genes, meta):
+def splitted_dataframes(model_paths, number_mixed_list, filter, genes, meta):
     """
-    creates two DataFrames for low and high purity containing the metrics and losses for all trained models
+    creates two DataFrames for filter and rest data containing the metrics and losses for all trained models
     :param model_paths: a list of file paths to the models
     :param number_mixed_list: a list of the number of mixed samples. Must be the same length as models
+    :param filter: the filter to apply
     :param genes: a DataFrame containing gene expression values
-    :param meta: a DataFrame containing the coresponding metadata
+    :param meta: a DataFrame containing the corresponding metadata
     :return: two DataFrames with columns for each
     """
-    low_dict = {
+    filter_dict = {
         "total_recon_loss": [],
         "total_reg_loss": [],
         "total_r2": []
     }
-    high_dict = {
+    other_dict = {
         "total_recon_loss": [],
         "total_reg_loss": [],
         "total_r2": []
@@ -80,11 +81,11 @@ def high_low_purity_dataframes(model_paths, number_mixed_list, genes, meta):
     models = model_loader(model_paths)
 
     for model in models:
-        low_metrics, high_metrics = high_low_metrics(model, genes, meta)
-        extract_relevant_metrics(low_metrics, low_dict)
-        extract_relevant_metrics(high_metrics, high_dict)
+        filter_metrics, other_metrics = splitted_metrics(model, filter, genes, meta)
+        extract_relevant_metrics(filter_metrics, filter_dict)
+        extract_relevant_metrics(other_metrics, other_dict)
 
-    low_df = pd.DataFrame(low_dict, index=number_mixed_list)
-    high_df = pd.DataFrame(high_dict, index=number_mixed_list)
+    filter_df = pd.DataFrame(filter_dict, index=number_mixed_list)
+    other_df = pd.DataFrame(other_dict, index=number_mixed_list)
 
-    return low_df, high_df
+    return filter_df, other_df

@@ -1,4 +1,5 @@
 import pandas as pd
+import phate
 from pandas import DataFrame
 
 
@@ -79,3 +80,49 @@ def combine_ccle_tcga(ccle_genes, ccle_meta, tcga_genes, tcga_meta):
     tcga_ccle_genes = pd.concat([ccle_genes, tcga_genes])
 
     return tcga_ccle_genes, tcga_ccle_meta
+
+
+def phate_transformation(data, verbose=1):
+    """use PHATE to transform the data"""
+    model = phate.PHATE(n_jobs=-2, verbose=verbose)
+    return model.fit_transform(data)
+
+
+def phate_per_disease(genes, meta):
+    """
+    takes the gene expression data and performs PHATE per disease. Combines the transformed data and its corresponding
+    metadata to a dictionary
+    :param genes: gene expression data
+    :param meta: metadata with either a column named diagnosis or a column named disease_backbone
+    :return: returns a dictionary like {"disease1": (PHATE_transformed_gene_expression, metadata), "disease2": ...}
+    """
+    genes = genes.sort_index()
+    meta = meta.sort_index()
+
+    # find the correct metadata column
+    if "diagnosis" in meta.columns:
+        disease_column_name = "diagnosis"
+    elif "disease_backbone" in meta.columns:
+        disease_column_name = "disease_backbone"
+    else:
+        raise Exception("No diagnosis column")
+
+    cancer_types = meta[disease_column_name].unique()
+
+    # create a dictionary that contains the phate-transformed gene expression and metadata for every disease
+    diseases_dict = {}
+
+    for cancer in cancer_types:
+        filter = meta[disease_column_name] == cancer
+
+        cancer_genes = genes[filter]
+        cancer_meta = meta[filter]
+
+        if len(cancer_genes) == 1:
+            continue
+
+        cancer_Y = phate_transformation(cancer_genes, verbose=0)
+
+        diseases_dict[cancer] = cancer_Y, cancer_meta
+
+    return diseases_dict

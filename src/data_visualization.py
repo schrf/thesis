@@ -4,27 +4,32 @@ import os.path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import torch
 
 
-def scatter_plot_classes(Y, metadata, title=None, output_dir=None):
+def scatter_plot_classes(Y, metadata, title=None, output_dir=None, show=True, categories=None):
     """
     creates a scatter plot visualization where each sample is colored by class
     :param Y: the 2D transformed data as numpy array
     :param metadata: a pandas Series or 1d numpy array containing metadata with classes
     :param title: optional title, if None the Series title is used
-    :param output_dir: path to save the plot. If None plot.show() will be called
+    :param output_dir: path to save the plot. If None plot won't be saved
+    :param show: whether plt.show() is called
+    :param categories: list of category/class names. If None they will be extracted from metadata
     """
 
     # Plot the PHATE transformed data
-    plt.figure(figsize=(24, 18))
-    plt.rcParams['font.size'] = 16
+    if show:
+        plt.figure(figsize=(24, 18))
+        plt.rcParams['font.size'] = 16
 
     dot_size = 300 * (1 / len(metadata)**0.5)
 
-    # Color coding
-    categories = metadata.unique()
+    if categories is None:
+        categories = metadata.unique()
 
+    # Color coding
     if len(categories) > 40:
         colors = generate_pastel_colors(len(categories))
     else:
@@ -37,47 +42,64 @@ def scatter_plot_classes(Y, metadata, title=None, output_dir=None):
 
         plt.scatter(Y[mask, 0], Y[mask, 1], color=color, label=category, s=dot_size)
 
-    plt.legend(title=metadata.name, markerscale=5, bbox_to_anchor=(1.05, 1), loc='upper left')
+    markerscale_legend = 50 / dot_size
+    plt.legend(title=metadata.name, markerscale=markerscale_legend, bbox_to_anchor=(1.05, 1), loc='upper left')
     if title is None:
         title = metadata.name
-    plt.title(title, fontsize=22)
+    if show:
+        plt.title(title, fontsize=22)
+    else:
+        plt.title(title)
+
     plt.xlabel('Dimension 1')
     plt.ylabel('Dimension 2')
-    if output_dir is None:
+    if show:
         plt.show()
-    else:
+    if output_dir is not None:
         if not os.path.exists(output_dir):
             os.mkdir(output_dir)
         file_path = output_dir + title
         print("saving plot in " + file_path)
         plt.savefig(file_path, bbox_inches='tight')
 
-def scatter_plot_gradient(Y, metadata, title=None, output_dir=None):
+def scatter_plot_gradient(Y, metadata, title=None, output_dir=None, show=True, gradient_range=None):
     """
     creates a scatter plot visualization where samples are colored by a color gradient
     :param Y: the output of PHATE's model.fit_transform(data)
     :param metadata: a pandas Series or 1d numpy array containing metadata with numbers
     :param title: optional title, if None the Series title is used
     :param save: path to save the plot. If None plot.show() will be called
+    :param show: whether plt.show() is called
+    :param gradient_range: gradient_range[0] is the minimum, gradient_range[1] is the maximum. They determine the range of the colorbar. If None they will be extracted from metadata
     """
 
     # Plot the PHATE transformed data
-    plt.figure(figsize=(24, 18))
-    plt.rcParams['font.size'] = 16
+    if show:
+        plt.figure(figsize=(24, 18))
+        plt.rcParams['font.size'] = 16
 
     dot_size = 300 * (1 / len(metadata)**0.5)
 
-    scatter = plt.scatter(Y[:, 0], Y[:, 1], c=metadata, cmap='viridis', s=dot_size)
+    if gradient_range is None:
+        scatter = plt.scatter(Y[:, 0], Y[:, 1], c=metadata, cmap='viridis', s=dot_size)
+    else:
+        min = gradient_range[0]
+        max = gradient_range[1]
+        scatter = plt.scatter(Y[:, 0], Y[:, 1], c=metadata, cmap='viridis', s=dot_size, vmin=min, vmax=max)
     plt.colorbar(scatter)
 
     if title is None:
         title = metadata.name
-    plt.title(title, fontsize=22)
+    if show:
+        plt.title(title, fontsize=22)
+    else:
+        plt.title(title)
+
     plt.xlabel('Dimension 1')
     plt.ylabel('Dimension 2')
-    if output_dir is None:
+    if show:
         plt.show()
-    else:
+    if output_dir is not None:
         if not os.path.exists(output_dir):
             os.mkdir(output_dir)
         file_path = output_dir + title
@@ -310,3 +332,51 @@ def metrics_overview_plot(df, label=None, xlabel=None):
             plt.xlabel(xlabel)
 
     plt.tight_layout()
+
+
+def plot_phate_per_disease(diseases_dict, column_name, as_classes):
+    """
+    generates a large plot containing subplots with PHATE visualisation for each disease with at least two samples
+    :param diseases_dict: the dictionary created by
+    :param column_name: the name of the column to use for coloring the dots
+    :param as_classes: if True the data in column name will be plotted as colored classes, otherwise as color gradient
+    :return: None
+    """
+    number_diseases = len(diseases_dict)
+
+    axis_length = math.ceil(math.sqrt(number_diseases))
+
+    plt.figure(figsize=(10 * axis_length, 10 * axis_length))
+
+    if as_classes:
+        # extract all possible categories from the dictionary. Ensures that in the final plot all subplots will have
+        # the same labels -> same order and same color for all classes
+        combined_meta = combine_per_disease_dict(diseases_dict)
+        diseases = combined_meta[column_name].unique()
+    else:
+        combined_meta = combine_per_disease_dict(diseases_dict)
+        min = combined_meta[column_name].min()
+        max = combined_meta[column_name].max()
+        gradient_range = (min, max)
+
+    for i, cancer in enumerate(diseases_dict):
+        disease_Y, disease_meta = diseases_dict[cancer]
+        plt.subplot(axis_length, axis_length, i + 1)
+        if as_classes:
+            scatter_plot_classes(disease_Y, disease_meta[column_name], title=cancer, output_dir=None, show=False, categories=diseases)
+        else:
+            scatter_plot_gradient(disease_Y, disease_meta[column_name], title=cancer, output_dir=None, show=False, gradient_range=gradient_range)
+
+    plt.suptitle(column_name, fontsize="xx-large", y=0.05)
+    plt.tight_layout()
+    plt.show()
+    plt.close()
+
+
+def combine_per_disease_dict(diseases_dict):
+    meta_list = []
+    for disease_name, data in diseases_dict.items():
+        genes, meta = data
+        meta_list.append(meta)
+    combined_meta = pd.concat(meta_list)
+    return combined_meta

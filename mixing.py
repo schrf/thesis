@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 from src.loader import load_data
 
 
-def generate_mixed_data(A, B, genes, meta, number_samples):
+def generate_mixed_data(A, B, genes, meta, number_samples, filter_backbone, filter_auxiliary):
     """
     generates artificial gene expression samples and their corresponding metadata by mixing with backbone
     :param A: parameter a of the Beta distribution
@@ -15,73 +15,72 @@ def generate_mixed_data(A, B, genes, meta, number_samples):
     :param genes: gene expression dataframe
     :param meta: metadata dataframe
     :param number_samples: the number of samples to generate
+    :param filter_backbone: filter for backbone data
+    :param filter_auxiliary: filter for auxiliary data
     :return: two dataframes for gene expression values and metadata
     """
-    # split data into high purity and low purity
-    low_purity = meta["cancer_purity"] < 0.6
-    high_purity = meta["cancer_purity"] >= 0.6
 
-    high_purity_genes = genes[high_purity]
-    low_purity_genes = genes[low_purity]
-    high_purity_meta = meta[high_purity]
-    low_purity_meta = meta[low_purity]
+    genes_backbone = genes[filter_backbone]
+    genes_auxiliary = genes[filter_auxiliary]
+    meta_backbone = meta[filter_backbone]
+    meta_auxiliary = meta[filter_auxiliary]
 
     meta_columns = meta.columns
 
     # combine the gene expression data with its corresponding metadata and randomly sample the gene expression data
-    high_purity_combined = high_purity_genes.join(high_purity_meta, how='inner')
-    low_purity_combined = low_purity_genes.join(low_purity_meta, how='inner')
+    combined_backbone = genes_backbone.join(meta_backbone, how='inner')
+    combined_auxiliary = genes_auxiliary.join(meta_auxiliary, how='inner')
 
-    if len(low_purity_combined) != len(low_purity_meta) or len(high_purity_combined) != len(high_purity_meta):
+    if len(combined_backbone) != len(meta_backbone) or len(combined_auxiliary) != len(meta_auxiliary):
         sys.exit("Samples in gene expression and meta do not match")
 
-    sampled_high_purity = high_purity_combined.sample(n=number_samples, random_state=0,
-                                                      replace=True)
-    sampled_low_purity = low_purity_combined.sample(n=number_samples, random_state=0,
+    sampled_auxiliary = combined_auxiliary.sample(n=number_samples, random_state=0,
+                                                  replace=True)
+    sampled_backbone = combined_backbone.sample(n=number_samples, random_state=0,
                                                     replace=True)
 
-    sampled_high_purity_meta = sampled_high_purity[meta_columns]
-    sampled_high_purity_genes = sampled_high_purity.drop(meta_columns, axis=1)
-    sampled_low_purity_meta = sampled_low_purity[meta_columns]
-    sampled_low_purity_genes = sampled_low_purity.drop(meta_columns, axis=1)
+    sampled_auxiliary_meta = sampled_auxiliary[meta_columns]
+    sampled_auxiliary_genes = sampled_auxiliary.drop(meta_columns, axis=1)
+    sampled_backbone_meta = sampled_backbone[meta_columns]
+    sampled_backbone_genes = sampled_backbone.drop(meta_columns, axis=1)
 
     # generate the weight vector using a beta distribution and flipping values below 0.5 to ensure the backbone to
     # always be the majority class
     beta_vector = np.random.beta(A, B, size=number_samples)
     to_flip = beta_vector < 0.5
     beta_vector[to_flip] = 1 - beta_vector[to_flip]
-    low_purity_scaling = beta_vector
-    high_purity_scaling = 1 - beta_vector
+    scaling_backbone = beta_vector
+    scaling_auxiliary = 1 - beta_vector
 
     # multiply samples by their random weights
-    sampled_high_purity_genes = sampled_high_purity_genes.mul(high_purity_scaling, axis=0)
-    sampled_low_purity_genes = sampled_low_purity_genes.mul(low_purity_scaling, axis=0)
+    sampled_auxiliary_genes = sampled_auxiliary_genes.mul(scaling_auxiliary, axis=0)
+    sampled_backbone_genes = sampled_backbone_genes.mul(scaling_backbone, axis=0)
 
-    sampled_high_purity_genes.reset_index(drop=True, inplace=True)
-    sampled_low_purity_genes.reset_index(drop=True, inplace=True)
+    sampled_auxiliary_genes.reset_index(drop=True, inplace=True)
+    sampled_backbone_genes.reset_index(drop=True, inplace=True)
 
-    # add the minority (sampled_high_purity_genes) to the backbone (sampled_low_purity_genes)
-    mixed_genes = sampled_high_purity_genes + sampled_low_purity_genes
+    # add the minority (sampled_auxiliary_genes) to the backbone (sampled_backbone_genes)
+    mixed_genes = sampled_auxiliary_genes + sampled_backbone_genes
 
     # combine the purity metadata
-    high_purity_scaled = sampled_high_purity_meta["cancer_purity"].mul(high_purity_scaling).reset_index(drop=True)
-    low_purity_scaled = sampled_low_purity_meta["cancer_purity"].mul(low_purity_scaling).reset_index(drop=True)
+    high_purity_scaled = sampled_auxiliary_meta["cancer_purity"].mul(scaling_auxiliary).reset_index(drop=True)
+    low_purity_scaled = sampled_backbone_meta["cancer_purity"].mul(scaling_backbone).reset_index(drop=True)
     mixed_purity = high_purity_scaled.add(low_purity_scaled)
 
     # define additional metadata information
-    disease_backbone = sampled_low_purity_meta["diagnosis"].reset_index(drop=True)
-    disease_auxiliary = sampled_high_purity_meta["diagnosis"].reset_index(drop=True)
-    dataset_backbone = sampled_low_purity_meta["dataset"].reset_index(drop=True)
-    dataset_auxiliary = sampled_high_purity_meta["dataset"].reset_index(drop=True)
+    disease_backbone = sampled_backbone_meta["diagnosis"].reset_index(drop=True)
+    disease_auxiliary = sampled_auxiliary_meta["diagnosis"].reset_index(drop=True)
+    dataset_backbone = sampled_backbone_meta["dataset"].reset_index(drop=True)
+    dataset_auxiliary = sampled_auxiliary_meta["dataset"].reset_index(drop=True)
 
     mixed_meta = pd.DataFrame({
         "cancer_purity": mixed_purity,
-        "names_backbone": sampled_low_purity_meta.index,
-        "names_auxiliary": sampled_high_purity_meta.index,
+        "names_backbone": sampled_backbone_meta.index,
+        "names_auxiliary": sampled_auxiliary_meta.index,
         "disease_backbone": disease_backbone,
         "disease_auxiliary": disease_auxiliary,
-        "weight_backbone": low_purity_scaling,
-        "weight_auxiliary": high_purity_scaling,
+        "weight_backbone": scaling_backbone,
+        "weight_auxiliary": scaling_auxiliary,
         "dataset_backbone": dataset_backbone,
         "dataset_auxiliary": dataset_auxiliary,
         "is_mixed": pd.Series(True, index=dataset_auxiliary.index)
@@ -127,20 +126,55 @@ def main():
     mixed_genes_list = []
     mixed_meta_list = []
 
+    healthy_limit = 0.2
+
     # mix for every cancer type number_generated samples
     for cancer_type in train_meta["diagnosis"].unique():
-        number_low_purity_samples = ((train_meta["cancer_purity"] < 0.6) & (train_meta["diagnosis"] == cancer_type)).sum()
-        if number_low_purity_samples > 0:
+        # TODO: if cancer_type not in cancer_list: continue to ensure that it is possible to generate only samples for specific cancer
 
-            # ensure that the backbone can only be from samples with cancer_type
-            cancer_filter = (train_meta["diagnosis"] == cancer_type) | (train_meta["cancer_purity"] >= 0.6)
-            genes_filtered = train_genes[cancer_filter]
-            meta_filtered = train_meta[cancer_filter]
+        # define filters that will be used for generating samples with different backbones and auxiliary samples
+        cancer_type_filter = train_meta["diagnosis"] == cancer_type
+        dummy_filter = pd.Series(True, index=train_meta.index)
+        healthy_filter = train_meta["cancer_purity"] < healthy_limit
+        tcga_filter = train_meta["dataset"] == "tcga"
+        ccle_filter = train_meta["dataset"] == "ccle"
+        ccle_cancer_type_filter = ccle_filter & cancer_type_filter
+        healthy_cancer_type_filter = healthy_filter & cancer_type_filter
 
-            # generate the speciefied amount of samples for every cancer_type
-            mixed_genes, mixed_meta = generate_mixed_data(A, B, genes_filtered, meta_filtered, number_generated)
-            mixed_genes_list.append(mixed_genes)
-            mixed_meta_list.append(mixed_meta)
+        # count how many samples exist for different filters
+        number_ccle_cancer_type_samples = ccle_cancer_type_filter.sum()
+        number_healthy_samples = healthy_cancer_type_filter.sum()
+
+        if number_healthy_samples > 0:
+            # mix healthy (<healthy_limit) as backbone with TCGA
+            healthy_tcga_mixed_genes, healthy_tcga_mixed_meta = generate_mixed_data(A, B, train_genes, train_meta,
+                                                                                     number_generated,
+                                                                                     healthy_cancer_type_filter,
+                                                                                     tcga_filter)
+            mixed_genes_list.append(healthy_tcga_mixed_genes)
+            mixed_meta_list.append(healthy_tcga_mixed_meta)
+
+            # mix healthy (<healthy_limit) as backbone with CCLE
+            healthy_ccle_mixed_genes, healthy_ccle_mixed_meta = generate_mixed_data(A, B, train_genes, train_meta,
+                                                                                    number_generated,
+                                                                                    healthy_cancer_type_filter,
+                                                                                    ccle_filter)
+            mixed_genes_list.append(healthy_ccle_mixed_genes)
+            mixed_meta_list.append(healthy_ccle_mixed_meta)
+
+        # mix with ccle as backbone
+        if number_ccle_cancer_type_samples > 0:
+            ccle_mixed_genes, ccle_mixed_meta = generate_mixed_data(A, B, train_genes, train_meta, number_generated,
+                                                                ccle_cancer_type_filter, dummy_filter)
+            mixed_genes_list.append(ccle_mixed_genes)
+            mixed_meta_list.append(ccle_mixed_meta)
+
+        # mix any samples of the current disease with any
+        cancer_type_genes, cancer_type_meta = generate_mixed_data(A, B, train_genes, train_meta, number_generated,
+                                                                  cancer_type_filter, dummy_filter)
+        mixed_genes_list.append(cancer_type_genes)
+        mixed_meta_list.append(cancer_type_meta)
+
 
     mixed_genes = pd.concat(mixed_genes_list, ignore_index=True)
     mixed_meta = pd.concat(mixed_meta_list, ignore_index=True)

@@ -108,9 +108,10 @@ def modified_meta(meta):
 
 
 def main():
-    if len(sys.argv) != 8:
+    if len(sys.argv) < 8 & len(sys.argv) > 9:
         sys.exit("Usage: python3 mixing.py <path/to/ccle.pickle> <path/to/tcga.pickle> <path/to/output/> "
-                 "<number mixed samples per cancer type> <A> <B> <Include non-mixed data | True or False>")
+                 "<number mixed samples per cancer type> <A> <B> <Include non-mixed data | True or False> "
+                 "[Optional: <list of diseases, e.g. \"Disease1 Disease2\">]")
     ccle_pickle_path = sys.argv[1]
     tcga_pickle_path = sys.argv[2]
     output_dir = sys.argv[3]
@@ -118,20 +119,28 @@ def main():
     A = float(sys.argv[5])
     B = float(sys.argv[6])
     include_original_data = sys.argv[7].lower() == 'true'
+    # Check if the optional list of diseases is provided
+    provided_diseases_exists = len(sys.argv) == 9
+    if provided_diseases_exists:
+        provided_diseases = sys.argv[8].split()
+    else:
+        provided_diseases = None
 
     genes, meta = load_data(ccle_pickle_path, tcga_pickle_path)
 
     train_genes, val_genes, train_meta, val_meta = train_test_split(genes, meta, test_size=0.2, random_state=42)
 
+    all_diseases = train_meta["diagnosis"].unique()
+
+    if provided_diseases is None:
+        provided_diseases = all_diseases
     mixed_genes_list = []
     mixed_meta_list = []
 
     healthy_limit = 0.2
 
-    # mix for every cancer type number_generated samples
-    for cancer_type in train_meta["diagnosis"].unique():
-        # TODO: if cancer_type not in cancer_list: continue to ensure that it is possible to generate only samples for specific cancer
-
+    # mix for the provided cancer types
+    for cancer_type in provided_diseases:
         # define filters that will be used for generating samples with different backbones and auxiliary samples
         cancer_type_filter = train_meta["diagnosis"] == cancer_type
         dummy_filter = pd.Series(True, index=train_meta.index)
@@ -180,12 +189,31 @@ def main():
     mixed_meta = pd.concat(mixed_meta_list, ignore_index=True)
 
     if include_original_data:
-        mod_meta = modified_meta(train_meta)
-        mixed_genes = pd.concat([mixed_genes, train_genes], ignore_index=True)
-        mixed_meta = pd.concat([mixed_meta, mod_meta], ignore_index=True)
+        # filter for the diseases in the given provided_diseases
+        diseases_filter_train = train_meta["diagnosis"].isin(provided_diseases)
+        diseases_filter_val = val_meta["diagnosis"].isin(provided_diseases)
 
-    with open(output_dir + f"mixed_genes_num_samples={number_generated}_a={A}_b={B}"
-                           f"_contains_original={include_original_data}.pickle", "wb") as handle:
+        val_genes = val_genes[diseases_filter_val]
+        val_meta = val_meta[diseases_filter_val]
+
+        train_diseases_genes = train_genes[diseases_filter_train]
+        mod_meta = modified_meta(train_meta)
+        train_diseases_meta = mod_meta[diseases_filter_train]
+
+        # combine the mixed and original data, only including diseases in provided_diseases
+        mixed_genes = pd.concat([mixed_genes, train_diseases_genes], ignore_index=True)
+        mixed_meta = pd.concat([mixed_meta, train_diseases_meta], ignore_index=True)
+
+    # generate the file name
+    if provided_diseases_exists:
+        diseases_str =  "_only_" + str(provided_diseases)
+    else:
+        diseases_str = ""
+    file_name = (f"mixed_genes_num_samples={number_generated}_a={A}_b={B}"
+                 f"_contains_original={include_original_data}{diseases_str}.pickle")
+
+    # save the file
+    with open(output_dir + file_name, "wb") as handle:
         pickle.dump(
             {
                 "rnaseq": mixed_genes,

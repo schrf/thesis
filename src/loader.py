@@ -123,5 +123,5 @@ def load_mixed_data(path):
 def model_loader(files_list):
     """yields one model after the other from the given path string to the model files"""
     for file in files_list:
-        model = torch.load(file)
+        model = torch.load(file, weights_only=False)
         yield model

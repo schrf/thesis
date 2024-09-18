@@ -108,7 +108,7 @@ def modified_meta(meta):
 
 
 def main():
-    if len(sys.argv) < 8 & len(sys.argv) > 9:
+    if len(sys.argv) < 8 or len(sys.argv) > 9:
         sys.exit("Usage: python3 mixing.py <path/to/ccle.pickle> <path/to/tcga.pickle> <path/to/output/> "
                  "<number mixed samples per cancer type> <A> <B> <Include non-mixed data | True or False> "
                  "[Optional: <list of diseases, e.g. \"Disease1 Disease2\">]")

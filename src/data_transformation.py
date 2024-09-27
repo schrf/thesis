@@ -126,3 +126,21 @@ def phate_per_disease(genes, meta):
         diseases_dict[cancer] = cancer_Y, cancer_meta
 
     return diseases_dict
+
+
+def modified_meta(meta):
+    """takes a metadata dataframe
+    returns a new one with backbone columns containing the original information and auxiliary columns containing None"""
+    mod_meta = pd.DataFrame({
+        "cancer_purity": meta["cancer_purity"],
+        "names_backbone": meta.index,
+        "names_auxiliary": pd.Series(None, index=meta.index),
+        "disease_backbone": meta["diagnosis"],
+        "disease_auxiliary": pd.Series(None, index=meta.index),
+        "weight_backbone": pd.Series(1, index=meta.index),
+        "weight_auxiliary": pd.Series(0, index=meta.index),
+        "dataset_backbone": meta["dataset"],
+        "dataset_auxiliary": pd.Series(None, index=meta.index),
+        "is_mixed": pd.Series(False, index=meta.index)
+    })
+    return mod_meta

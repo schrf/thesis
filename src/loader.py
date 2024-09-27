@@ -3,7 +3,7 @@ import pandas as pd
 import os.path
 import torch
 
-from src.data_transformation import combine_ccle_tcga
+from src.data_transformation import combine_ccle_tcga, modified_meta
 
 
 def ccle_full_loader() -> pd.DataFrame:
@@ -110,18 +110,33 @@ def load_data(ccle_path, tcga_path):
     combined_genes, combined_meta = combine_ccle_tcga(ccle_genes, ccle_meta, tcga_genes, tcga_meta)
     return combined_genes, combined_meta
 
-def load_mixed_data(path):
-    """loads the file at path and returns the gene expression and metadata dataframe"""
-    with open(path, 'rb') as file:
-        data = pickle.load(file)
-        train_genes = data["rnaseq"]
-        train_meta = data["meta"]
-        val_genes = data["rnaseq_val"]
-        val_meta = data["meta_val"]
-        return train_genes, val_genes, train_meta, val_meta
 
 def model_loader(files_list):
     """yields one model after the other from the given path string to the model files"""
     for file in files_list:
         model = torch.load(file, weights_only=False)
         yield model
+
+
+def load_mixed_data(path, combine_train_val=False):
+    """
+    loads the data and returns gene expression values and the metadata, split into train and validation or both combined
+    :param file_path: the file path to the pickle file containing the dictionary
+    :param combine_train_val: whether to combine train and validation data or not
+    :return: gene expression and metadata dataframe for each train and validation or for both combined
+    """
+    with open(path, "rb") as mixed:
+        data = pickle.load(mixed)
+    genes_mixed = data["rnaseq"]
+    genes_val = data["rnaseq_val"]
+    meta_mixed = data["meta"]
+    meta_val = data["meta_val"]
+
+    meta_val = modified_meta(meta_val)
+
+    if combine_train_val:
+        genes_mixed = pd.concat([genes_mixed, genes_val], ignore_index=True)
+        meta_mixed = pd.concat([meta_mixed, meta_val], ignore_index=True)
+        return genes_mixed, meta_mixed
+    else:
+        return genes_mixed, meta_mixed, genes_val, meta_val

@@ -129,6 +129,7 @@ def main():
         dummy_filter = pd.Series(True, index=train_meta.index)
         healthy_filter = train_meta["cancer_purity"] < healthy_limit
         tcga_filter = train_meta["dataset"] == "tcga"
+        tcga_cancer_type_filter = tcga_filter & cancer_type_filter
         ccle_filter = train_meta["dataset"] == "ccle"
         ccle_cancer_type_filter = ccle_filter & cancer_type_filter
         healthy_cancer_type_filter = healthy_filter & cancer_type_filter
@@ -138,32 +139,38 @@ def main():
         number_healthy_samples = healthy_cancer_type_filter.sum()
 
         if number_healthy_samples > 0:
-            # mix healthy (<healthy_limit) as backbone with TCGA
+            # mix healthy (<healthy_limit) as backbone with TCGA of current disease
             healthy_tcga_mixed_genes, healthy_tcga_mixed_meta = generate_mixed_data(A, B, train_genes, train_meta,
                                                                                      number_generated,
                                                                                      healthy_cancer_type_filter,
-                                                                                     tcga_filter)
+                                                                                     tcga_cancer_type_filter)
             mixed_genes_list.append(healthy_tcga_mixed_genes)
             mixed_meta_list.append(healthy_tcga_mixed_meta)
 
-            # mix healthy (<healthy_limit) as backbone with CCLE
-            healthy_ccle_mixed_genes, healthy_ccle_mixed_meta = generate_mixed_data(A, B, train_genes, train_meta,
+            # mix healthy (<healthy_limit) as backbone with CCLE of current disease
+            if ccle_cancer_type_filter.sum() > 0:
+                healthy_ccle_mixed_genes, healthy_ccle_mixed_meta = generate_mixed_data(A, B, train_genes, train_meta,
                                                                                     number_generated,
                                                                                     healthy_cancer_type_filter,
-                                                                                    ccle_filter)
+                                                                                    ccle_cancer_type_filter)
+            else:
+                healthy_ccle_mixed_genes, healthy_ccle_mixed_meta = generate_mixed_data(A, B, train_genes, train_meta,
+                                                                                        number_generated,
+                                                                                        healthy_cancer_type_filter,
+                                                                                        ccle_filter)
             mixed_genes_list.append(healthy_ccle_mixed_genes)
             mixed_meta_list.append(healthy_ccle_mixed_meta)
 
-        # mix with ccle as backbone
+        # mix with ccle as backbone with current disease
         if number_ccle_cancer_type_samples > 0:
             ccle_mixed_genes, ccle_mixed_meta = generate_mixed_data(A, B, train_genes, train_meta, number_generated,
-                                                                ccle_cancer_type_filter, dummy_filter)
+                                                                ccle_cancer_type_filter, cancer_type_filter)
             mixed_genes_list.append(ccle_mixed_genes)
             mixed_meta_list.append(ccle_mixed_meta)
 
-        # mix any samples of the current disease with any
+        # mix current disease with current disease
         cancer_type_genes, cancer_type_meta = generate_mixed_data(A, B, train_genes, train_meta, number_generated,
-                                                                  cancer_type_filter, dummy_filter)
+                                                                  cancer_type_filter, cancer_type_filter)
         mixed_genes_list.append(cancer_type_genes)
         mixed_meta_list.append(cancer_type_meta)
 
@@ -192,7 +199,7 @@ def main():
         diseases_str =  "_only_" + str(provided_diseases)
     else:
         diseases_str = ""
-    file_name = (f"mixed_genes_num_samples={number_generated}_a={A}_b={B}"
+    file_name = (f"mixed_genes_only_same_cancer_type_num_samples={number_generated}_a={A}_b={B}"
                  f"_contains_original={include_original_data}{diseases_str}.pickle")
 
     # save the file

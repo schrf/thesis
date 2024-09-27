@@ -1,4 +1,5 @@
 import pandas as pd
+import torch
 from torch.utils.data import DataLoader
 
 from src.datasets.simple_dataset import SimpleDataset
@@ -49,7 +50,7 @@ def splitted_metrics(model, filter, genes, meta):
 
     filter_dataset = SimpleDataset(filter_genes, filter_meta, transform=transform)
     other_dataset = SimpleDataset(other_genes, other_meta, transform=transform)
-    max_batch_size = 1024
+    max_batch_size = 1
     filter_dataloader = create_dataloader(filter_dataset, max_batch_size)
     other_dataloader = create_dataloader(other_dataset, max_batch_size)
     filter_metrics = val_loop(model, filter_dataloader, [0.85, 0.15], 0.00001, "cuda")
@@ -89,3 +90,35 @@ def splitted_dataframes(model_paths, number_mixed_list, filter, genes, meta):
     other_df = pd.DataFrame(other_dict, index=number_mixed_list)
 
     return filter_df, other_df
+
+def get_latent_representation(genes, model, device, transform={"z_score": "per_sample"}):
+    """
+    takes the gene expression data and passes it through the model to get the latent representation.
+    Assumes there is enough gpu memory to pass everything at a time through the model
+    :param genes: the gene expression dataframe
+    :param model: the trained model object to use. Has to have a model.encoder.fc layer
+    :param device: the device to be used
+    :return:  returns the latent space representation of all samples as pd.Dataframe
+    """
+    indices = genes.index
+
+    # add dummy cancer purity for compatibility with the SimpleDataset
+    dummy_meta = pd.DataFrame({"cancer_purity": pd.Series(-1, index=indices)})
+
+    dataset = SimpleDataset(genes, dummy_meta, transform)
+
+    genes_tensor, _, _ = dataset[:]
+    genes_tensor = genes_tensor.to(device)
+    model.to(device)
+
+    model.eval()
+    with torch.no_grad():
+        print(model.encoder.resnet.fc)
+        mu, sigma = model.encoder.forward(genes_tensor)
+        # latent_representation = torch.cat((mu, sigma), dim=-1)
+        latent_representation = sigma
+
+    latent_df = pd.DataFrame(latent_representation.cpu().numpy())
+    latent_df.index = indices
+
+    return latent_df

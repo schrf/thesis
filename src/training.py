@@ -10,9 +10,9 @@ from src.data_visualization import plot_results
 from torchinfo import summary
 
 # loss functions
-def KLD(mu, sigma):
+def KLD(mu, log_var):
     """calculate KL-divergence"""
-    kld = -0.5 * torch.sum(1 + sigma - mu.pow(2) - sigma.exp())
+    kld = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
     return kld
 
 
@@ -151,10 +151,10 @@ def train_loop(model, train_loader, tasks_weights, kl_loss_weight, optimizer, de
         x, w, _ = batch
         x, w = x.to(device), w.to(device)
 
-        x_hat, w_hat, mu, sigma = model(x)
+        x_hat, w_hat, mu, log_var = model(x)
         recon_loss = recon_loss_weight * MSE(x_hat, x)
         purity_loss = purity_loss_weight * MSE(w_hat, w)
-        kl_loss = KLD(mu, sigma) * kl_loss_weight
+        kl_loss = KLD(mu, log_var) * kl_loss_weight
         loss = torch.div(torch.add(recon_loss, purity_loss), 2) + kl_loss
 
         optimizer.zero_grad()
@@ -192,10 +192,10 @@ def val_loop(model, val_loader, tasks_weights, kl_loss_weight, device):
             x, w, _ = batch
             x, w = x.to(device), w.to(device)
 
-            x_hat, w_hat, mu, sigma = model(x)
+            x_hat, w_hat, mu, log_var = model(x)
             recon_loss = recon_loss_weight * MSE(x_hat, x)
             purity_loss = purity_loss_weight * MSE(w_hat, w)
-            kl_loss = KLD(mu, sigma) * kl_loss_weight
+            kl_loss = KLD(mu, log_var) * kl_loss_weight
             loss = torch.div(torch.add(recon_loss, purity_loss), 2) + kl_loss
 
             total_loss += loss.item() / count

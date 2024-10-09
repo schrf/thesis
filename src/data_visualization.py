@@ -294,18 +294,53 @@ def difference_greater_than(x, max_difference):
     difference = max - min
     return difference > max_difference
 
-def tumor_percentage_histogram(data, dataset_name, bins=20):
+
+
+def tumor_percentage_histogram(data, dataset_name, bins=20, dataset=None):
     """
-    plots a histogram of the tumor percentage of samples
+    Plots a histogram of the tumor percentage of samples, with optional coloring based on dataset (e.g., 'TCGA', 'CCLE').
+
     :param data: a Series containing the tumor percentage
-    :param dataset_name: the name, e.g. "TCGA" or "BRCA"
+    :param dataset_name: the name for the plot, e.g., "TCGA" or "BRCA"
+    :param bins: number of bins for the histogram
+    :param dataset: a Series (optional) containing the dataset information (e.g., 'TCGA' or 'CCLE') corresponding to 'data'
     :return: None
     """
     plt.xlim(0., 1.)
-    plt.hist(data, bins=bins, range=(0., 1.))
     plt.xlabel("Tumor Percentage")
     plt.ylabel("Number of samples")
     plt.title(f"{dataset_name} Tumor Percentage")
+
+    if dataset is not None:
+        # Ensure all dataset names are in uppercase
+        dataset = dataset.str.upper()
+
+        # Sort the dataset so 'TCGA' is first and 'CCLE' is second, if they exist
+        ordered_datasets = ['TCGA', 'CCLE']
+        unique_datasets = [ds for ds in ordered_datasets if ds in dataset.unique()]
+        colors = ['#1f77b4', '#ff7f0e']  # Define colors for TCGA and CCLE
+        hist_data = []
+
+        # Calculate histogram data for each dataset
+        for i, ds in enumerate(unique_datasets):
+            subset_data = data[dataset == ds]
+            hist, bin_edges = np.histogram(subset_data, bins=bins, range=(0., 1.))
+            hist_data.append(hist)
+
+            # Calculate the width of each bar
+            bin_width = bin_edges[1] - bin_edges[0]
+
+            # Plot the current dataset with corrected alignment
+            if i == 0:
+                plt.bar(bin_edges[:-1], hist, width=bin_width, align='edge', color=colors[i], label=f"{ds}")
+            else:
+                plt.bar(bin_edges[:-1], hist, width=bin_width, align='edge', color=colors[i], bottom=hist_data[0], label=f"{ds}")
+
+        plt.legend()
+    else:
+        # Default behavior with no dataset provided
+        plt.hist(data, bins=bins, range=(0., 1.))
+
     plt.show()
 
 def metrics_overview_plot(df, label=None, xlabel=None):

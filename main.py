@@ -2,6 +2,8 @@ import sys
 import torch
 from sklearn.model_selection import train_test_split
 
+from src.datasets.mixed_dataset import MixedDataset
+from src.datasets.noisy_dataset import NoisyDataset
 from src.loader import load_data, load_mixed_data
 from src.training import epochs_loop
 from src.datasets.simple_dataset import SimpleDataset
@@ -53,7 +55,7 @@ def main():
         mixed_path = sys.argv[1]
         comment = sys.argv[2]
         try:
-            train_genes, val_genes, train_meta, val_meta = load_mixed_data(mixed_path)
+            train_genes, train_meta, val_genes, val_meta = load_mixed_data(mixed_path)
             print("Data loaded successfully.")
         except Exception as e:
             print(f"An error occurred during loading mixed data: {e}")

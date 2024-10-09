@@ -52,9 +52,12 @@ def splitted_metrics(model, filter, genes, meta):
     other_dataset = SimpleDataset(other_genes, other_meta, transform=transform)
     max_batch_size = 1
     filter_dataloader = create_dataloader(filter_dataset, max_batch_size)
-    other_dataloader = create_dataloader(other_dataset, max_batch_size)
     filter_metrics = val_loop(model, filter_dataloader, [0.85, 0.15], 0.00001, "cuda")
-    other_metrics = val_loop(model, other_dataloader, [0.85, 0.15], 0.00001, "cuda")
+    if len(other_dataset) > 0:
+        other_dataloader = create_dataloader(other_dataset, max_batch_size)
+        other_metrics = val_loop(model, other_dataloader, [0.85, 0.15], 0.00001, "cuda")
+    else:
+        other_metrics = None
     return filter_metrics, other_metrics
 
 
@@ -84,9 +87,13 @@ def splitted_dataframes(model_paths, number_mixed_list, filter, genes, meta):
     for model in models:
         filter_metrics, other_metrics = splitted_metrics(model, filter, genes, meta)
         extract_relevant_metrics(filter_metrics, filter_dict)
-        extract_relevant_metrics(other_metrics, other_dict)
+        if other_metrics is not None:
+            extract_relevant_metrics(other_metrics, other_dict)
 
     filter_df = pd.DataFrame(filter_dict, index=number_mixed_list)
+    if other_metrics is None:
+        return filter_df
+
     other_df = pd.DataFrame(other_dict, index=number_mixed_list)
 
     return filter_df, other_df

@@ -98,34 +98,44 @@ def splitted_dataframes(model_paths, number_mixed_list, filter, genes, meta):
 
     return filter_df, other_df
 
-def get_latent_representation(genes, model, device, transform={"z_score": "per_sample"}):
+
+def get_latent_representation(genes, model, device, batch_size=2048, transform={"z_score": "per_sample"}):
     """
-    takes the gene expression data and passes it through the model to get the latent representation.
-    Assumes there is enough gpu memory to pass everything at a time through the model
+    Takes the gene expression data and passes it through the model to get the latent representation.
+    Splits the data into batches if the number of samples exceeds the specified batch size.
+
     :param genes: the gene expression dataframe
     :param model: the trained model object to use. Has to have a model.encoder.fc layer
-    :param device: the device to be used
-    :return:  returns the latent space representation of all samples as pd.Dataframe
+    :param device: the device to be used (e.g., "cuda" or "cpu")
+    :param batch_size: the size of each batch (default is 2048)
+    :param transform: transformations to be applied to the data (default is z-score per sample)
+    :return: Latent space representation of all samples as pd.DataFrame
     """
     indices = genes.index
 
-    # add dummy cancer purity for compatibility with the SimpleDataset
+    # Add dummy cancer purity for compatibility with the SimpleDataset
     dummy_meta = pd.DataFrame({"cancer_purity": pd.Series(-1, index=indices)})
-
     dataset = SimpleDataset(genes, dummy_meta, transform)
 
-    genes_tensor, _, _ = dataset[:]
-    genes_tensor = genes_tensor.to(device)
+    # Use DataLoader to handle batching
+    data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+
+    latent_representations = []
+
     model.to(device)
-
     model.eval()
-    with torch.no_grad():
-        print(model.encoder.resnet.fc)
-        mu, sigma = model.encoder.forward(genes_tensor)
-        # latent_representation = torch.cat((mu, sigma), dim=-1)
-        latent_representation = sigma
 
-    latent_df = pd.DataFrame(latent_representation.cpu().numpy())
-    latent_df.index = indices
+    with torch.no_grad():
+        for batch_genes_tensor, _, _ in data_loader:
+            batch_genes_tensor = batch_genes_tensor.to(device)
+
+            mu, sigma = model.encoder.forward(batch_genes_tensor)
+
+            # Use mu as the latent representation
+            latent_representations.append(mu.cpu())
+
+    # Concatenate all batches to form the full latent representation
+    latent_representation = torch.cat(latent_representations, dim=0)
+    latent_df = pd.DataFrame(latent_representation.numpy(), index=indices)
 
     return latent_df
